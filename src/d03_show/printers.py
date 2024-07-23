@@ -1,22 +1,40 @@
 """Various print functions for different file types"""
-
+import typing as T
 from src.d00_utils import table_column_slicer
-from src.d00_utils import get_extension
+from src.d00_utils.get_ext_from import get_extension
+from rasterio.transform import Affine
 
 
 def print_attributes(obj, n):
-    attributes = []
-    for attribute in dir(obj):
+    pattributes = {}
+    att_opts = {}
+    for i, attribute in enumerate(dir(obj)):
+        print(f"Attribute {i}: {attribute}")
+        att_opts[i] = []
         if not attribute.startswith('__'):
             value = getattr(obj, attribute)
             if isinstance(value, float):
-                value = round(value, n)
-            attributes.append(f"{attribute}: {value}")
-            if len(attributes) == 3:
-                print(', '.join(attributes))
-                attributes = []
-    if attributes:
-        print(', '.join(attributes))
+                string = str(round(value, n))
+            elif isinstance(value, T.Sequence) and not isinstance(value, str):
+                string = ', '.join([str(v) for v in value])
+            elif "transform" in attribute:
+                parts = str(value).split(',')
+                print(f'Parts: {parts}')
+                line1 = "transform:"
+                line2 = f"  | {parts[0]} {parts[1]} {parts[2]} |"
+                line3 = f"  | {parts[3]} {parts[4]} {parts[5]} |"
+                string = f"{line1}\n{line2}\n{line3}"
+            else:
+                string = value
+            pattributes[i] = f"{attribute}: {string}"
+
+    if len(pattributes) < 3:
+        print(', '.join([f"{k}: v" for k, v in pattributes.items()]))
+    else:
+        if pattributes:
+            for i, print_str in pattributes.items():
+                print(print_str)
+    print("\n")
 
 
 class PrintFileInfo:

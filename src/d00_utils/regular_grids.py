@@ -4,6 +4,7 @@ import geopandas as gpd
 import shapely
 import numpy as np
 import os
+import typing as T
 
 
 def get_width_height(bounds):
@@ -26,8 +27,8 @@ def get_width_height(bounds):
 def create_regular_grid(gdf: gpd.GeoDataFrame = None,
                         bounds: tuple = None,
                         n_cells: tuple = (2, 2),
-                        overlap: bool = True,
-                        epsg_code: int = None):
+                        overlap: bool = False,
+                        epsg_code: int = None) -> T.Tuple[gpd.GeoDataFrame, int, int]:
     """Create square grid that covers a geodataframe area
     """
     assert bounds is not None or gdf is not None, "Either gdf or bounds must be provided"
@@ -43,12 +44,12 @@ def create_regular_grid(gdf: gpd.GeoDataFrame = None,
     else:
         cell_sizex = (xmax - xmin) / n_cells[0]
         cell_sizey = (ymax - ymin) / n_cells[1]
-    print(f'    Grid sizes: {round(cell_sizex)}, {round(cell_sizey)}')
+    print(f'    Tile sizes: {round(cell_sizex)}, {round(cell_sizey)}')
     # create the cells in a loop
     grid_cells = []
-    for x0 in np.arange(xmin, xmax + cell_sizex, cell_sizex):
-        for y0 in np.arange(ymin, ymax + cell_sizey, cell_sizey):
-            x1 = x0 - cell_sizex
+    for x0 in np.arange(xmin, xmax, cell_sizex):
+        for y0 in np.arange(ymin, ymax, cell_sizey):
+            x1 = x0 + cell_sizex
             y1 = y0 + cell_sizey
             poly = shapely.geometry.box(x0, y0, x1, y1)
             # print (gdf.overlay(poly, how='intersection'))
@@ -65,7 +66,7 @@ def create_regular_grid(gdf: gpd.GeoDataFrame = None,
 
     # Add grid_id and grid_area columns
     cells_gdf['grid_id'] = range(len(cells_gdf))
-    cells_gdf['grid_area'] = cells_gdf['geometry'].area
+    cells_gdf['grid_area'] = round(cells_gdf['geometry'].area, 2).astype("float32")
 
     return cells_gdf, n_cells, len(grid_cells)
 

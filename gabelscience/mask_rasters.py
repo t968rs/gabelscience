@@ -17,9 +17,9 @@ from rasterio.crs import CRS
 from tqdm import tqdm
 
 from src.d00_utils import maths, regular_grids
-from src.d00_utils import bbox_to_gdf
-from src.d00_utils import get_system_memory, file_size
-from src.d01_processing.test_export import test_export_array as test_export
+from src.d00_utils.bounds_convert import bbox_to_gdf
+from src.d00_utils.system import get_system_memory, file_size
+from src.d01_processing.export_raster import test_export_array as test_export
 from src.d03_show.printers import print_attributes
 from src.specs.raster_specs import create_raster_specs_from_path
 
@@ -541,7 +541,7 @@ class MaskIt:
                 print(f' No file, {path}\n{te}')
 
     def run_scenarios(self) -> tuple[dict, rasterio.crs.CRS()]:
-        from src.d00_utils import check_crs_match_from_list
+        from src.d00_utils.check_crs_from_pathlist import check_crs_match_from_list
         if "only" in self.grid_type:
             self.terrain = None
         rasterstocheck = [r for r in [self.raw_raster, self.masking_raster, self.terrain] if r is not None]

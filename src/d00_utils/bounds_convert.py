@@ -8,6 +8,21 @@ import rasterio.warp
 import os
 
 
+def string_to_affine(s):
+    from rasterio.transform import Affine
+    parts = str(s).split(',')  # Assuming the string is comma-separated
+    print(f'Parts: {parts}')
+    if len(parts) != 6 or len(parts) != 9:
+        return False, "String does not contain exactly six parts"
+
+    try:
+        coefficients = [float(part) for part in parts]
+    except ValueError:
+        return False, "One or more parts of the string could not be converted to float"
+
+    return True, Affine(*coefficients)
+
+
 def bounds_to_polygon(xmin, ymin, xmax, ymax, crs):
     # Create GDF polygon from bounding box
     bbox = box(xmin, ymin, xmax, ymax)
