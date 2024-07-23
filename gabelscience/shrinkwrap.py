@@ -8,8 +8,11 @@ from src.d00_utils.regular_grids import create_regular_grid
 from src.d03_show import cplotting, printers
 import os
 import shapely
+from geocube.api.core import make_geocube
+from geocube.vector import vectorize
 import concurrent.futures
 import dask
+import dask.dataframe
 from dask.diagnostics import ProgressBar
 import dask_geopandas
 import rioxarray as rioxr
@@ -123,12 +126,25 @@ class ShrinkwrapRaster:
 
         return rasterized
 
+    # Delayed creation of GeoDataFrame
     @dask.delayed
-    def buffer_delayed(self, gdf):
-        buffer = round(self.raster_specs.res, 1)
+    def create_gdf(self, geom):
+        return gpd.GeoDataFrame({'data': [1] * len(geom)}, geometry=geom, crs=self.crs)
+
+    @dask.delayed
+    def buffer_delayed(self, gdf, buffer: float = None, caps: T.Union[str, int] = "square", joins: T.Union[None, str, int] = None,
+                       mitre: T.Union[None, int] = None):
+        if joins == "mitre":
+            if mitre is None:
+                mitre = 4
+        elif joins is None:
+            joins = "mitre"
+            mitre = 4
+        if not buffer:
+            buffer = round(self.raster_specs.res, 1)
         gdf['geometry'] = gdf.geometry.buffer(buffer, resolution=4,
-                                              cap_style="flat", join_style="mitre",
-                                              mitre_limit=4)
+                                              cap_style=caps, join_style=joins,
+                                              mitre_limit=mitre)
         return gdf
 
     def remove_holes(self, gdf):
@@ -151,7 +167,7 @@ class ShrinkwrapRaster:
         # Perform buffer
         print(f' Buffering polygons...')
         delayed_buff = self.buffer_delayed(gddf)
-        print(f"Read polygon shapefile\n {gddf.columns}")
+        print(f" Read polygon shapefile\n {gddf.columns}")
         with ProgressBar():
 
             gddf = delayed_buff.compute()
@@ -180,7 +196,7 @@ class ShrinkwrapRaster:
         ds.rio.write_crs(self.crs, inplace=True)
 
         # Process ones mask option
-        ones_array = xr.ones_like(ds[variable0], dtype="int8")
+        ones_array = xr.ones_like(ds[variable0], dtype="int16")
         ones_array = ones_array.rio.write_crs(self.crs, inplace=True)
         ones_array = ones_array.where(ones_array == 1, 0)
         ones_array.rio.write_nodata(0, inplace=True)
@@ -193,26 +209,43 @@ class ShrinkwrapRaster:
 
         self._create_output_folders()
         self.import_and_buffer_polygons()
+
+        # Open raster as ones
+        print(f'Opening raster as ones...')
         ds = self.open_raster_as_ones()
 
         # Convert to GPD/ Dask GPD
         print(f'Converting xr to gpd...')
-        df = ds["ones_mask"].to_dataframe().reset_index()
-        gdf = gpd.GeoDataFrame(
-            df.ones_mask, geometry=gpd.points_from_xy(df.x, df.y))
-        gdf.crs = self.crs
-        print(f'Converting to dask...')
-        gddf = (dask_geopandas
-                .from_geopandas(gdf.set_geometry('geometry'))
-                .spatial_shuffle(by="hilbert", npartitions=1000))
+        ds["ones_mask"] = ds["ones_mask"].squeeze().astype('int16').rio.write_crs(self.crs)
 
-        # Fix geoemtry
-        print(f'Fixing geometry...{type(gddf["geometry"])}')
+        # Vectorize raster
+        print(f'Vectorizing raster...')
+        rds = ds["ones_mask"].squeeze()
+        rds.name = "data"
+        df = rds.to_dataframe().reset_index()
+        ddf = dask.dataframe.from_pandas(df, npartitions=1000)
+        print(f'Created (x, y):\n{ddf}')
+
+        # Convert to geometry
+        geom = dask_geopandas.points_from_xy(ddf, "x", "y", crs=self.crs)
+
+        # Directly create a Dask GeoDataFrame from the Dask DataFrame with geometries
+        gddf = dask_geopandas.from_dask_dataframe(ddf, geometry=geom)
+
+        # Apply spatial operations
+        print(f'Applying spatial operations...')
+        gddf = gddf.spatial_shuffle(by="hilbert", npartitions=1000)
         gddf['geometry'] = shapely.make_valid(gddf['geometry'])
+
+        # Further operations can be applied as needed
         with ProgressBar():
-            gdf_out = gddf.compute()
+            gddf = self.buffer_delayed(gddf, caps="square")
+            gddf.intersection(self.processing_gdf)
+            gdf_out = gddf.dissolve().to_crs(self.crs)
+            gdf_out = gdf_out.explode(index_parts=False).loc[:, ["geometry"]].compute()
 
         # Plot / Export
+        print(f'Plotting and exporting...')
         cplotting.plot_map_data_to_html(gdf_out, self.output_folder, "points")
         gdf_out.to_file(os.path.join(self.vector_folder, "ones_mask.shp"), driver="ESRI Shapefile")
         print(f'Created ones mask\n {gdf_out}')
