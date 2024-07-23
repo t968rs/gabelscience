@@ -81,3 +81,10 @@ def get_gdf_from_fc(path):
         gdf = gpd.read_file(path)
     c_list = [c for c in gdf.columns.to_list()]
     return gdf, c_list
+
+
+if __name__ == "__main__":
+    shppath = r"A:\Iowa_3B\02_mapping\Grids_Rock\zz_Vectors\examples.shp"
+    ingdf = get_gdf_from_fc(shppath)[0].to_crs(epsg=3417)
+    grid = create_regular_grid(ingdf, n_cells=(5, 5), epsg_code=3417)[0].loc[:, ["geometry"]]
+    grid.to_file(r"A:\Iowa_3B\02_mapping\Grids_Rock\zz_Vectors\grid.shp", driver="ESRI Shapefile")

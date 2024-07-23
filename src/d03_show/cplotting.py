@@ -15,9 +15,11 @@ class Plotting:
         os.makedirs(folder, exist_ok=True)
         self.folder = folder
         if title is None:
-            title = "results"
+            self.title = "results"
+        else:
+            self.title = title
         self.map_config_path = os.path.join(self.folder, f"{self.title}_map_config.json")
-        self.title = title
+
         self.map_path = os.path.normpath(os.path.join(self.folder, f"{self.title}.html"))
         self.indata = input_data
 

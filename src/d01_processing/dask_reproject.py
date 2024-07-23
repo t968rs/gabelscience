@@ -7,7 +7,7 @@ from dask.diagnostics import ProgressBar, ResourceProfiler
 from dask.distributed import Client, LocalCluster
 from tqdm import tqdm
 from src.d00_utils import create_regular_grid
-from src.d03_show.plotting import plot_map_data_to_html as plot_to_html
+from src.d03_show.cplotting import plot_map_data_to_html as plot_to_html
 
 
 def dask_progress_bar(min_time: int):

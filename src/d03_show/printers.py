@@ -9,7 +9,7 @@ def print_attributes(obj, n):
     pattributes = {}
     att_opts = {}
     for i, attribute in enumerate(dir(obj)):
-        print(f"Attribute {i}: {attribute}")
+        # print(f"Attribute {i}: {attribute}")
         att_opts[i] = []
         if not attribute.startswith('__'):
             value = getattr(obj, attribute)

@@ -1,1 +1,3 @@
 zbase_env/
+*.nc
+*.nc4

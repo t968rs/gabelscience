@@ -87,7 +87,7 @@ class DefinIowaProjections:
 
 
 if __name__ == "__main__":
-    infolder = r"A:\nebraska_BLE\02_mapping\Grids_Salt"
+    infolder = r"A:\nebraska_BLE\02_mapping\keg\testing"
     other_crs = 26852
 
     initialize = DefinIowaProjections(infolder, other_crs)
