@@ -1,0 +1,7 @@
+zbase_env/
+*.nc
+*.nc4
+/test_data/FEMA_data_test/
+/test_data/test_folder/
+/test_data/downloads/
+*.log
