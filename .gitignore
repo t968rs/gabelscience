@@ -5,3 +5,4 @@ zbase_env/
 /test_data/test_folder/
 /test_data/downloads/
 *.log
+*__pycache__/

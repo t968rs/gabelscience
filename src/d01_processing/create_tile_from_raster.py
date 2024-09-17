@@ -79,7 +79,6 @@ class CreateRasterIndex:
 
         print(f'\nThere are {len(self.tile_dict)} grid tiles\n')
 
-
     @staticmethod
     def raster_extents_to_gdf(raster_dict, tgt_crs=None):
 

@@ -3,6 +3,7 @@ import geopandas as gpd
 import pandas as pd
 import numpy as np
 import typing as T
+from tqdm import tqdm
 from src.d00_utils.open_spatial import open_fc_any
 from src.d00_utils.unique_id import create_all_unique_id
 
@@ -64,9 +65,12 @@ def polygon_to_line_gdf(input_gdf, keeper_columns=None):
             lines_data[keeper] = input_gdf[keeper]
 
     # Get exterior boundary
-    lines = input_gdf.geometry.boundary
-    lines_data["geometry"] = lines
+    bounding_lines = input_gdf.geometry.boundary
+    lines_data["geometry"] = bounding_lines
     lines_gdf = gpd.GeoDataFrame(lines_data, crs=input_gdf.crs, geometry='geometry')
+    remove_empty_geometries(lines_gdf)
+    lines_gdf = lines_gdf.explode()
+    remove_empty_geometries(lines_gdf)
     return lines_gdf
 
 
@@ -120,10 +124,15 @@ def create_random_sample_points(input_gdf: gpd.GeoDataFrame,
     print(f"Sample Size: {input_gdf['sample_size']}")
 
     sample_points = []
+    pbar = tqdm(total=len(input_gdf))
     for idx, row in input_gdf.iterrows():
         # points = [row.geometry.interpolate(np.random.random(), normalized=True) for _ in range(row['sample_size'])]
         line_geo = gpd.GeoSeries([row.geometry])
+        # print(f"Index: {idx}, Sample Size: {row['sample_size']}")
         sample_points.append({"geometry": line_geo.sample_points(row['sample_size'])})
+        pbar.update(1)
+        if int(idx) % 100 == 0:
+            pbar.set_postfix({"Sampled": idx, "Total": len(input_gdf)})
 
     sample_geo = gpd.GeoSeries(sample_points)
     sample_points = gpd.GeoDataFrame(pd.concat(sample_geo, ignore_index=True),
@@ -155,13 +164,13 @@ def generate_transects(input_points: gpd.GeoDataFrame,
         pt1 = row.geometry
 
         # Get all lines with the same unique_ids
-        lines = input_lines.loc[input_lines["unique_id"] == uid]
-        unique_buffs = lines["buff_dist"].unique().tolist()
+        connecting_lines = input_lines.loc[input_lines["unique_id"] == uid & input_lines["buff_dist"] != 0]
+        unique_buffs = connecting_lines["buff_dist"].unique().tolist()
 
         # Generate transects
         transect_list = []
         for b in unique_buffs:
-            transect = pt1.shortest_line(lines.loc[lines["buff_dist"] == b].geometry)
+            transect = pt1.shortest_line(connecting_lines.loc[connecting_lines["buff_dist"] == b].geometry)
             transect_list.append(transect)
         transects_geo = gpd.GeoSeries(transect_list)
         transects_geo = transects_geo.line_merge()
@@ -180,7 +189,7 @@ def generate_transects(input_points: gpd.GeoDataFrame,
 
 
 if __name__ == "__main__":
-    input_shp = "/Users/kevin/Library/CloudStorage/OneDrive-kevingabelman/2D_Tools/processed_data/cup_testing/Zone_A_3418.shp"
+    input_shp = r"E:\Iowa_1A\02_mapping\Review_Copperas\cup_testing\Zone_A_3418.shp"
     number_buffers = 3
     buffer_dist = -3.3
     ingdf = open_fc_any(input_shp)
@@ -190,24 +199,30 @@ if __name__ == "__main__":
     buff_amounts = multi_buffed["buff_dist"].unique().tolist()
 
     print(f"Buffer Amounts: {buff_amounts}")
-    lines, points = [], []
+    lines = []
     for i, buff in enumerate(buff_amounts):
         buffed = multi_buffed.loc[multi_buffed["buff_dist"] == buff]
         buffed.to_file(os.path.join(workingfolder, f"Zone_A_{i + 1}.shp"))
         print(f"Buffered {i + 1} by {buff}")
 
         bufflines = polygon_to_line_gdf(buffed, keeper_columns=["buff_dist", "unique_id"])
-        samples = create_random_sample_points(bufflines, 10)
-        samples.to_file(os.path.join(workingfolder, f"Zone_A_{i + 1}_samples.shp"))
+        lines.append(bufflines)
 
-        lines.append(bufflines), points.append(samples)
+    # Concatenate lines
+    for l in lines:
+        print(f"Line: {l.head()}")
+    lines_df = pd.concat(lines, ignore_index=True)
+    print(f"Lines: {lines_df.head()}")
+    print(f"Lines Columns: {lines_df.columns}")
+    lines = gpd.GeoDataFrame.from_records(lines_df)
+    lines_to_sample = lines.loc[lines["buff_dist"] == buff_amounts[0]]
 
-    # Concatenate lines and points
-    lines = gpd.GeoDataFrame(pd.concat(lines, ignore_index=True), crs=ingdf.crs, geometry='geometry')
-    points = gpd.GeoDataFrame(pd.concat(points, ignore_index=True), crs=ingdf.crs, geometry='geometry')
+    # Create random sample points from lines
+    samples = create_random_sample_points(lines_to_sample, 10)
+    samples.to_file(os.path.join(workingfolder, f"Zone_A_samples.shp"))
 
     # Generate transects
-    transects = generate_transects(points, lines)
+    transects = generate_transects(samples, lines)
 
     # Save transects
     transects.to_file(os.path.join(workingfolder, "transects.shp"))
