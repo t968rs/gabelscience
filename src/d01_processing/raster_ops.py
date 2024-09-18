@@ -35,8 +35,3 @@ def mask_with_ones(input_ds, key_string=None) -> xr.DataArray:
     print(f' Ones mask array: {ones_array}')
     return input_array
 
-
-def export_raster(array, out_path):
-    array.rio.to_raster(out_path, tiled=True, lock=threading.Lock(), compress='LZW',
-                        windowed=True, bigtiff="YES")
-    return out_path

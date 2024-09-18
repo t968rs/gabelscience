@@ -45,7 +45,7 @@ def test_export_array(array, folder: str, line):
 
 def export_raster(array: [xr.DataArray, xr.Dataset],
                   outpath: T.Union[os.PathLike, str],
-                  nodata: T.Union[float, int] = None):
+                  nodata: T.Union[float, int] = None) -> T.Union[os.PathLike, str]:
     """Export an array to a tif file"""
 
     if isinstance(array, xr.Dataset):
