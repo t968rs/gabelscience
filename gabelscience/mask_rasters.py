@@ -15,7 +15,7 @@ import xarray as xr
 from dask.distributed import Client, LocalCluster
 from rasterio.crs import CRS
 from tqdm import tqdm
-
+from src.d01_processing.raster_ops import mask_with_ones
 from src.d00_utils import maths, regular_grids
 from src.d00_utils.bounds_convert import bbox_to_gdf
 from src.d00_utils.system import get_system_memory, file_size
@@ -181,37 +181,6 @@ class MaskIt:
                 "attrs": ["_Fill_Value"]}
 
     @staticmethod
-    def mask_with_ones(input_ds, key_string):
-        # Pre-process input data
-        # print(f"{input_ds.data_vars.keys()}")
-        varname = [k for k in input_ds.data_vars.keys() if key_string in k][0]
-        print(f'\nNo Data: {input_ds[varname].rio.nodata}')
-        print(f'Encoded: {input_ds[varname].rio.encoded_nodata}')
-        if not input_ds[varname].rio.nodata:
-            input_ds[varname].rio.write_nodata(input_ds[varname].rio.encoded_nodata, encoded=False, inplace=True)
-        print(f'No Data: {input_ds[varname].rio.nodata}')
-        encoded = input_ds[varname].rio.encoded_nodata
-        non_encoded = input_ds[varname].rio.nodata
-        print(f'Encoded: {encoded}\n')
-
-        # Make the shaped-array
-        ones_array = xr.where(input_ds[varname] == non_encoded, np.nan, 1).astype('float32')
-        ones_array = xr.where(ones_array == 1, 1, -1).astype('int8')
-        # ones_array = input_ds[varname].where(input_ds[varname].notnull(keep_attrs=True), 1, drop=False)
-        print(f' Ones mask array: {ones_array}')
-        # int_array = (input_ds[varname] * 0 + 1).astype(dtype="int8")
-        if varname == "ones_mask":
-            input_ds[varname] = ones_array
-        elif varname in input_ds.variables:
-            input_ds = input_ds.drop_vars([varname])
-            input_ds["ones_mask"] = ones_array
-        input_ds["ones_mask"].fillna(-1)
-        input_ds["ones_mask"].rio.write_nodata(-1, inplace=True, encoded=False)
-        input_ds["ones_mask"].rio.set_nodata(-1, inplace=True)
-
-        return input_ds
-
-    @staticmethod
     def rename_var_and_attr(ds, old: str, new: str):
 
         ds = ds.rename_vars({old: new})
@@ -312,7 +281,9 @@ class MaskIt:
 
         # Simplify mask ds
         print(f'Getting INT mask...')
-        mask_ds = self.mask_with_ones(mask_ds, "mask").chunk(self.chunk_return)
+        mask_array = mask_with_ones(mask_ds, "mask").chunk(self.chunk_return)
+        mask_ds["ones_mask"] = mask_array
+        mask_ds = mask_ds.drop_vars([v for v in mask_ds.rio.vars if v != "ones_mask"])
         # test_export(mask_ds["ones_mask"], self.intmds_folder, line=428)
 
         # Open analysis grid
