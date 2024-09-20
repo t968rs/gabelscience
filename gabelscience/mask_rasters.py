@@ -512,7 +512,7 @@ class MaskIt:
                 print(f' No file, {path}\n{te}')
 
     def run_scenarios(self) -> tuple[dict, rasterio.crs.CRS()]:
-        from src.d00_utils.check_crs_from_pathlist import check_crs_match_from_list
+        from src.d00_utils.check_crs_match import check_crs_match_from_list
         if "only" in self.grid_type:
             self.terrain = None
         rasterstocheck = [r for r in [self.raw_raster, self.masking_raster, self.terrain] if r is not None]

@@ -12,7 +12,7 @@ import rioxarray as rioxr
 from src.d00_utils.regular_grids import create_regular_grid
 from src.d00_utils.get_ext_from import get_extension, get_spatial_type
 from src.d00_utils.bounds_convert import bbox_to_gdf
-from src.d00_utils.check_crs_from_pathlist import check_crs_match_from_list
+from src.d00_utils.check_crs_match import check_crs_match_from_list
 from src.d00_utils.open_spatial import open_fc_any
 from src.d01_processing import export_raster
 from src.specs import raster_specs, literals

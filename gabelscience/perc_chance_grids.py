@@ -6,11 +6,12 @@ import os
 import typing as T
 from sparse import COO
 import xarray as xr
-from src.specs.raster_specs import create_raster_specs_from_path
+from src.specs.raster_specs import create_raster_specs_from_path, create_raster_specs_from_xarray
 import logging
 from src.d01_processing.export_raster import export_raster, test_export_array
 from time import process_time
 import dask.config
+from src.d00_utils.bounds_convert import bbox_to_gdf
 import matplotlib.pyplot as plt
 
 
@@ -73,13 +74,6 @@ def sparse_an_xarray(array: xr.DataArray):
     return xr.apply_ufunc(COO, array, dask="parallelized", output_dtypes=[array.dtype])
 
 
-def drop_attributes(array):
-    """
-    Drop attributes from an xarray
-    """
-    return array
-
-
 def align_xarrays(left_array,
                   other_arrays: T.Union[T.List, T.Dict, T.Tuple, xr.DataArray]):
     """
@@ -94,13 +88,15 @@ def align_xarrays(left_array,
     return xr.align(*array_list, join="left")
 
 
-def get_return_name(return_number):
+def drop_atts(array, atts):
     """
-    Get the return name
+    Drop the attributes
     """
-    if return_number < 0:
-        return_number = [k for k, v in RETURNS.items() if v == return_number][0]
-    return [k for k, v in RETURN_NAMES.items() if v == return_number][0]
+    current_atts = {k: v for k, v in array.attrs.items()}
+    for att in current_atts:
+        if att in atts:
+            array.attrs.pop(att, None)
+    return array
 
 
 def update_stats_atts(array):
@@ -112,7 +108,7 @@ def update_stats_atts(array):
              "STATISTICS_MEAN": np.round(stats_mask.mean().values, 2),
              "STATISTICS_MAXIMUM": np.round(stats_mask.max().values, 2),
              "STATISTICS_COUNT": np.round(stats_mask.count().values, 2),
-             "STATISTICS_MINIMUM": np.round(stats_mask.min().values, 2),}
+             "STATISTICS_MINIMUM": np.round(stats_mask.min().values, 2), }
     array.assign_attrs(stats)
     return array
 
@@ -120,10 +116,12 @@ def update_stats_atts(array):
 RETURNS = {10: 0.0002, 9: 0.01, 8: 0.02,
            7: 0.04, 6: 0.10}
 
-RETORD_LOOKUP = {v: k for k, v in RETURNS.items()}
+RETURN_LOOKUP = {v: k for k, v in RETURNS.items()}
 
 RETURN_NAMES = {"_0_2pct": 10, "_01pct": 9, "_02pct": 8,
                 "_04pct": 7, "_10pct": 6}
+
+RETURN_NAME_LOOKUP = {v: k for k, v in RETURN_NAMES.items()}
 
 OUTPUT_SUBFOLDERS = ["00_DEM_Masked", "01_WSE_Filled", "02_WSE_Nearest_Ground", "03_PAC", "__INTMD__"]
 
@@ -136,17 +134,37 @@ class PercChanceGrids:
 
         self.return_paths = {}
         self.xarrays_ready = {}
+        self.valid_gdf = None
         self.dem = xr.DataArray
+        self.analysis_ds = xr.Dataset
 
-        self._init_xarrays_ready()
         # Find the WSE rasters
         self._find_wse_rasters()
         self._value_raster_specs = create_raster_specs_from_path(self.return_paths[10])
+        self._all_raster_specs = {}
         self._set_configs()
+        logger.info(f"\n\nNEW RUN\n\n")
+        logger.info(f"Value Raster Specs: {self.vspecs}")
 
     @property
     def vspecs(self):
         return self._value_raster_specs
+
+    @property
+    def all_specs(self):
+        return self._all_raster_specs
+
+    def add_specs(self, key, path=None, array=None, raster_object=None):
+        if path:
+            self._all_raster_specs[key] = create_raster_specs_from_path(path)
+        elif isinstance(array, xr.DataArray):
+            self._all_raster_specs[key] = create_raster_specs_from_xarray(array)
+        else:
+            self._all_raster_specs[key] = raster_object
+
+    def _init_all_raster_specs(self):
+        for key, path in self.return_paths.items():
+            self._all_raster_specs[f"IN_{key}"] = create_raster_specs_from_path(path)
 
     @property
     def output_subfolders(self):
@@ -159,10 +177,10 @@ class PercChanceGrids:
     @property
     def dem_path(self):
         masked_dem_path = os.path.join(self.output_subfolders[0], "dem_masked.tif")
-        if os.path.exists(masked_dem_path):
-            return masked_dem_path
-        else:
-            return self.input_dem_path
+        # if os.path.exists(masked_dem_path):
+        #     return masked_dem_path
+        # else:
+        return self.input_dem_path
 
     @staticmethod
     def compute_perc_variables(current_return):
@@ -191,20 +209,6 @@ class PercChanceGrids:
                         self.return_paths[value] = path
                         break
 
-    def _init_xarrays_ready(self):
-        """
-        Initialize the xarrays ready
-        """
-        self.xarrays_ready = {k: None for k, v in RETURN_NAMES.items()}
-
-    def add_to_ready_xarrays(self, key: str, value: xr.DataArray):
-        """
-        Hold the xarrays ready
-        """
-        if key not in RETURN_NAMES.keys():
-            raise ValueError(f"Key {key} not in {RETURN_NAMES.keys()}")
-        self.xarrays_ready[key] = value
-
     def _set_configs(self):
         dask.config.set(**{'array.slicing.split_large_chunks': False})
 
@@ -225,33 +229,41 @@ class PercChanceGrids:
         valid_xarray = update_stats_atts(valid_xarray)
 
         # Export the valid raster
-        print(f"\nValid xarray: \n{valid_xarray.attrs}\n")
+        # print(f"\nValid xarray: \n{valid_xarray.attrs}\n")
         export_raster(valid_xarray, os.path.join(self.output_subfolders[1], "WSE_0_2pct.tif"))
+        vbounds = valid_xarray.rio.bounds()
+        self.valid_gdf = bbox_to_gdf(vbounds, self.vspecs.crs, "valid_bounds", self.output_path)
 
-        # Add to the ready xarrays
-        self.add_to_ready_xarrays("_0_2pct", valid_xarray)
+        return valid_xarray
 
-    def open_dem_xarray(self):
-        # Open DEM and clip to valid bounds
+    def open_dem_xarray(self, varray):
+        # Open DEM
         print(f"DEM path: {self.dem_path}")
         dem = rioxr.open_rasterio(self.dem_path, chunks={"x": 2048, "y": 2048}).rename("DEM")
-        atts = {"crs": self.vspecs.crs, "BandName": "DEM",
-                "long_name": "Digital Elevation Model", "DataType": "Elevation"}
+
+        # Assign attributes
+        atts = {"crs": dem.rio.crs, "BandName": "DEM",
+                "long_name": "Digital Elevation Model", "DataType": "Elevation", "_FillValue": -9999}
         dem = dem.assign_attrs(atts)
-        demcrs = dem.rio.crs
-        print(f"DEM CRS: {demcrs}")
-        dem = dem.rio.clip_box(*self.vspecs.bounds).chunk({"x": 2048, "y": 2048})
+        for k, v in {k: v for k, v in dem.attrs.items()}.items():
+            if k not in atts:
+                dem.attrs.pop(k, None)
+
+        # Clip the DEM to the valid raster
+        dem = dem.rio.clip(self.valid_gdf.geometry)
+        # dem = dem.rio.pad_box(*self.vspecs.bounds, constant_values=dem.rio.nodata)
 
         # align the DEM and valid raster
         print(f'Aligning DEM and valid raster')
-        validarray = self.xarrays_ready["_0_2pct"]
-        dem.reindex_like(validarray, method="nearest", tolerance=1.5)
-        # test_export_array(dem, self.output_subfolders[4], 243)
-        _, dem = xr.align(self.xarrays_ready["_0_2pct"], dem, join="left")
+        dem.reindex_like(varray, method="nearest", tolerance=1.5).chunk({"x": 2048, "y": 2048})
+        print(f"Reindexed DEM shape: {dem.shape}")
+        print(f"Other SHape: {varray.shape}")
 
         # Mask the DEM by valid raster
-        dem = dem.where(validarray != validarray.rio.nodata).chunk({"x": 2048, "y": 2048})
+        dem = dem.where(varray != varray.rio.nodata)
         dem = dem.rio.write_nodata(-9999, inplace=True, encoded=False)
+        print(f"Masked DEM SHape: \n{dem.shape}")
+        print(f"Other Shape: \n{varray.shape}")
 
         # Round the DEM to 2 decimal places
         dem = dem.round(2)
@@ -263,130 +275,210 @@ class PercChanceGrids:
         if not os.path.exists(oupath):
             export_raster(dem, oupath)
 
+        # Print bounds for storage
         print(f"Masked DEM:")
-        for k, v in dem.attrs.items():
-            print(f"\t{k}: \t\t{v}")
-        self.dem = dem
+        # for k, v in dem.attrs.items():
+        #     print(f"\t{k}: \t\t{v}")
+        print(f"DEM Shape: \n{dem.shape}")
+        bounds = dem.rio.bounds()
+        bbox_to_gdf(bounds, self.vspecs.crs, "dem_bounds", self.output_subfolders[4])
+
+        # Convert to dataset
+        self.analysis_ds = dem.to_dataset(dim="band")
+        dem_var_name = list(self.analysis_ds.data_vars)[0]  # Get the current variable name
+        self.analysis_ds = self.analysis_ds.rename_vars({dem_var_name: "Ground"})
+        # Drop the 'band' dimension if it exists
+        if 'band' in varray.dims:
+            varray = varray.isel(band=0, drop=True)
+        self.analysis_ds["WSE_0_2pct"] = varray
+        self.analysis_ds = self.analysis_ds.chunk({"x": 2048, "y": 2048})
+        for var, _ in self.analysis_ds.data_vars.items():
+            print(f"\nVariable: {var}, {self.analysis_ds[var].nbytes / 1e9} GB")
+            self.analysis_ds[var] = self.analysis_ds[var].rio.write_nodata(-9999, inplace=True, encoded=False)
+            if var == "Ground":
+                self.add_specs(f"OPEN_{var}", array=self.analysis_ds[var])
+            self.add_specs(f"OPEN_{var}", array=self.analysis_ds[var])
+            test_export_array(self.analysis_ds[var], self.output_subfolders[4], 297)
+
+        # Delete the antecedent arrays to free up resources
+        del dem, varray
+
+        print(f"\nDS: \n{self.analysis_ds}")
 
     def open_wse_xarrays(self):
         """
         Open the WSE xarrays
         """
-        opened = {}
         for key, path in self.return_paths.items():
             if key == 10:
                 continue
 
-            wse = rioxr.open_rasterio(path, chunks={"x": 2048, "y": 2048}).rename(f"WSE{get_return_name(key)}")
-            wse.rio.write_crs(self.vspecs.crs, inplace=True)
-            attrs = {"crs": self.vspecs.crs, "BandName": f"WSE{get_return_name(key)}",
-                     "long_name": f"Water Surface Elevation {RETURNS[key] * 100}%",
-                     "DataType": "Elevation"}
-            wse = wse.assign_attrs(attrs)
+            dsw = rioxr.open_rasterio(path, band_as_variable=True, chunks={"x": 2048, "y": 2048})
+            new_varname = f"WSE{RETURN_NAME_LOOKUP.get(key, 'WSE_UNK')}"
+            dsw = dsw.rename_vars({"band_1": new_varname})
+            print(f"\nOpened {dsw.nbytes / 1e9} GB")
+            self.add_specs(f"OPEN_{key}", array=dsw)
+            logger.info(f" SPECS {self.all_specs[f'OPEN_{key}']}")
+            atts = {"crs": dsw.rio.crs, "BandName": RETURN_NAME_LOOKUP.get(key, None),
+                    "long_name": f"Water Surface Elevation {RETURNS.get(key, None) * 100}%",
+                    "DataType": "Elevation"}
+            pre_attrs = {k: v for k, v in dsw.attrs.items()}
+            for k, v in pre_attrs.items():
+                if k in atts:
+                    dsw.attrs[k] = atts[k]
+                else:
+                    dsw.attrs.pop(k, None)
 
             # Re-index the WSE
-            wse = wse.reindex_like(self.xarrays_ready["_0_2pct"], method="nearest", tolerance=1.5)
-            # print(f"\nWSE{key} xarray: \n{wse}")
-            opened[key] = wse
+            no_data = dsw[new_varname].attrs["_FillValue"] if "_FillValue" in dsw[new_varname].attrs else -9999
+            if len(dsw.data_vars) > 1:
+                raise ValueError("More than one variable in the dataset")
+            dsw = dsw.rio.clip(self.valid_gdf.geometry)
+            dsw = dsw.reindex_like(self.analysis_ds["Ground"], method="nearest", tolerance=1.5)
+            if dsw[new_varname].shape != self.analysis_ds["Ground"].shape:
+                raise ValueError(
+                    f"Shapes do not match: {dsw[new_varname].shape} and {self.analysis_ds['Ground'].shape}")
+            dsw = dsw.rio.pad_box(*self.all_specs["OPEN_Ground"].bounds)
+            dsw[new_varname] = dsw[new_varname].rio.write_nodata(no_data, inplace=True, encoded=False)
+            dsw.rio.write_crs(self.vspecs.crs, inplace=True)
 
-        # Align the WSE to the DEM
-        aligned_wse_list = align_xarrays(self.xarrays_ready["_0_2pct"], opened)[1:]
-        returns_aligned = [a.name.split("WSE")[1] for a in aligned_wse_list if "WSE" in a.name and
-                           a.name.split("WSE")[1] in RETURN_NAMES.keys()]
-        aligned_wse_dict = {k: v for k, v in zip(returns_aligned, aligned_wse_list)}
-        print(f"\nAligned WSE: {list(aligned_wse_dict.keys())}")
-        print(f"Array Names: {[v.name for v in aligned_wse_dict.values()]}\n")
-
-        for key, wse in aligned_wse_dict.items():
-            print(f'\tnodata: {wse.rio.nodata}\n\tencoded: {wse.rio.encoded_nodata}')
             # Round the WSE to 1 decimal places
-            wse = wse.round(1)
-            # Fill the wse with DEM where it is null
-            wse_gaps = wse.where(wse == wse.rio.nodata)
-            print(f"\nFilling WSE{key} where it is null")
-            wse = xr.where(wse_gaps, self.dem, wse).chunk({"x": 2048, "y": 2048})
-            print(f'\tnodata: {wse.rio.nodata}\n\tencoded: {wse.rio.encoded_nodata}')
-            wse.rio.write_nodata(-9999, inplace=True, encoded=False)
-            print(f'\tnodata: {wse.rio.nodata}\n\tencoded: {wse.rio.encoded_nodata}')
-            print(f" Filled WSE{key}: \n{wse}")
-            self.add_to_ready_xarrays(f"{key}", wse)
+            dsw = dsw.round(1)
+            test_export_array(dsw[new_varname], self.output_subfolders[4], 335)
+            self.analysis_ds = xr.combine_by_coords([self.analysis_ds, dsw],
+                                                    join="outer", combine_attrs="drop_conflicts")
+        print(f"\nDS: \n{self.analysis_ds}")
+        self.analysis_ds = self.analysis_ds.chunk({"x": 2048, "y": 2048})
+        self.analysis_ds = drop_atts(self.analysis_ds, ["BandName", "long_name"])
+        # Handle some nodata
+        for varname, darr in self.analysis_ds.data_vars.items():
+            print(f"\n Variable: {varname}, {self.analysis_ds[varname].nbytes / 1e9} GB")
+            # darr.rio.write_nodata(-9999, inplace=True, encoded=False)
+            test_export_array(self.analysis_ds[varname], self.output_subfolders[4], 346)
 
-            # Export the filled WSE
-            oupath = os.path.join(self.output_subfolders[1], f"WSE{key}_filled.tif")
-            export_raster(wse, oupath)
+        print(f"\nDS: \n{self.analysis_ds}")
+
+    def fill_wse_with_dem(self):
+        filler = self.analysis_ds["Ground"]
+        test_export_array(self.analysis_ds, self.output_subfolders[4], 348)
+        for varname, dv in self.analysis_ds.data_vars.items():
+            print(f"\n Variable: {varname}")
+
+            if "WSE" in varname:
+                darr = self.analysis_ds[varname]
+                test_export_array(darr, self.output_subfolders[4], 356)
+                print(f"\nFilling {varname} where it is null")
+                print(f"{darr.name} : {darr.shape}")
+                where_test = xr.where((darr > 0), 1, 0)
+                where_test.rio.write_nodata(-9999, inplace=True, encoded=False)
+                test_export_array(where_test, self.output_subfolders[4], 361)
+                print(f'\tnodata: {darr.rio.nodata}\n\tencoded: {darr.rio.encoded_nodata}')
+
+                # darr_fills = darr.where(darr == darr.rio.nodata, filler)
+                # test_export_array(darr_fills, self.output_subfolders[4], 354)
+                # darr_filled = darr.where(darr != darr.rio.nodata) + darr_fills
+                # test_export_array(darr_filled, self.output_subfolders[4], 356)
+                # print(f"\tFilled array min: {darr_fills.min().values}, max: {darr_fills.max().values}")
+                # darr_filled.rio.write_nodata(-9999, inplace=True, encoded=False)
+                # print(f'\tnodata: {darr_filled.rio.nodata}\n\tencoded: {darr_filled.rio.encoded_nodata}')
+                # print(f" Filled {varname}: \n{darr_filled}")
+                # self.analysis_ds[varname] = darr_filled
+
+                # Export the filled WSE
+                oupath = os.path.join(self.output_subfolders[1], f"{varname}_filled.tif")
+                outarr = self.analysis_ds[varname]
+                outarr.rio.to_raster(oupath, tiled=True, lock=threading.Lock(), compress='LZW',
+                                     windowed=True, bigtiff="YES")
+
+        self.analysis_ds = self.analysis_ds.chunk({"x": 2048, "y": 2048})
 
     def compute_next_high_next_low(self):
         """
         Compute the percent annual chance
         """
         # Set up validity and dem arrays
-        validity, dem = self.xarrays_ready["_0_2pct"], self.dem
-        valid_loc = validity != validity.rio.nodata
+        dem = self.analysis_ds["Ground"]
+        valid_loc = dem != dem.rio.nodata
 
         # Set up the next highest and lowest array holders
-        next_highest_xarray = (xr.zeros_like(validity, chunks=validity.chunks).where(valid_loc)
-                               .rename("NextHighestElevation"))
-        next_lowest_xarray = (xr.zeros_like(validity, chunks=validity.chunks).where(valid_loc)
-                              .rename("NextLowestElevation"))
-        nearest_to_dem = (xr.zeros_like(validity, chunks=validity.chunks).where(valid_loc).rename("NearestToDEM"))
+        self.analysis_ds["NextHighestElevation"] = xr.zeros_like(dem, chunks=dem.chunks).where(valid_loc)
+        self.analysis_ds["NextLowestElevation"] = xr.zeros_like(dem, chunks=dem.chunks).where(valid_loc)
+        self.analysis_ds["NearestToDEM"] = xr.zeros_like(dem, chunks=dem.chunks).where(valid_loc)
 
         # Loop through the xarrays
-        for i, key, xarray in enumerate(self.xarrays_ready.items()):
-            diff = xarray - self.dem
+        for i, (vname, xarray) in enumerate(self.analysis_ds.data_vars.items()):
+            if "WSE" not in vname:
+                continue
+            diff = xarray - dem
 
             # Nearest to DEM
             if i == 0:
-                nearest_to_dem = xr.where(valid_loc & xarray != xarray.rio.nodata, key, nearest_to_dem)
+                self.analysis_ds["NearestToDEM"] = xr.where(
+                    valid_loc & xarray != xarray.rio.nodata, vname, self.analysis_ds["NearestToDEM"])
             else:
-                nearest_to_dem = xr.where(valid_loc & (abs(diff) < nearest_to_dem), key, nearest_to_dem)
+                self.analysis_ds["NearestToDEM"] = xr.where(
+                    valid_loc & (abs(diff) < self.analysis_ds["NearestToDEM"]), vname, self.analysis_ds["NearestToDEM"])
+            self.analysis_ds["NearestToDEM"] = self.analysis_ds["NearestToDEM"].rio.write_nodata(-9999, inplace=True)
 
             # High logic
-            high_not_zero = next_highest_xarray != 0
+            high_not_zero = self.analysis_ds["NextHighestElevation"] != 0
             higher_than_dem = diff > 0
 
-            next_highest_1 = xr.where(higher_than_dem & high_not_zero & (xarray < next_highest_xarray), True, False)
+            next_highest_1 = xr.where(
+                higher_than_dem & high_not_zero & (xarray < self.analysis_ds["NextHighestElevation"]), True, False)
             next_highest_2 = xr.where(higher_than_dem & ~high_not_zero, True, False)
 
             # High calculation
-            next_highest_xarray = xr.where(next_highest_1 | next_highest_2, xarray, next_highest_xarray)
+            self.analysis_ds["NextHighestElevation"] = xr.where(
+                next_highest_1 | next_highest_2, xarray, self.analysis_ds["NextHighestElevation"])
+            self.analysis_ds["NextHighestElevation"] = (self.analysis_ds["NextHighestElevation"]
+                                                        .rio.write_nodata(-9999, inplace=True))
 
             # Low logic
-            low_not_zero = next_lowest_xarray != 0
-            lower_than_dem = diff < 0
+            low_not_zero = (self.analysis_ds["NextLowestElevation"] != 0).astype(bool)
+            lower_than_dem = (diff < 0).astype(bool)
+            x_morethan_holder = (xarray > self.analysis_ds["NextLowestElevation"]).astype(bool)
 
-            next_lowest_1 = xr.where(lower_than_dem & (low_not_zero & xarray > next_lowest_xarray), True, False)
+            next_lowest_1 = xr.where(
+                lower_than_dem & (low_not_zero & x_morethan_holder), True, False)
             next_lowest_2 = xr.where(lower_than_dem & ~low_not_zero, True, False)
 
             # Low calculation
-            next_lowest_xarray = xr.where(next_lowest_1 | next_lowest_2, xarray, next_lowest_xarray)
+            self.analysis_ds["NextLowestElevation"] = xr.where(
+                next_lowest_1 | next_lowest_2, xarray, self.analysis_ds["NextLowestElevation"])
+            self.analysis_ds["NextLowestElevation"] = (self.analysis_ds["NextLowestElevation"]
+                                                       .rio.write_nodata(-9999, inplace=True))
 
         # Chunk them
-        next_highest_xarray = next_highest_xarray.chunk({"x": 2048, "y": 2048})
-        next_lowest_xarray = next_lowest_xarray.chunk({"x": 2048, "y": 2048})
-        nearest_to_dem = nearest_to_dem.chunk({"x": 2048, "y": 2048})
+        self.analysis_ds.chunk({"x": 2048, "y": 2048})
 
         # Create near-ground percentages
-        for n, pct in RETURNS:
-            nearest_to_dem = nearest_to_dem.where(nearest_to_dem == n, pct)
+        print(f"Creating near-ground percentages")
+        print(f"For: {[str(v * 100) + "%," for v in RETURNS.values()]} returns")
+        for n, pct in RETURNS.items():
+            self.analysis_ds["NearestToDEM"] = self.analysis_ds["NearestToDEM"].where(
+                self.analysis_ds["NearestToDEM"] == n, pct)
+        self.analysis_ds["NearestToDEM"] = self.analysis_ds["NearestToDEM"].rio.write_nodata(-9999, inplace=True)
 
-        # Export next highest and lowest rasters
-        print(f" Exporting next highest and lowest rasters")
-        highpath = os.path.join(self.output_subfolders[2], "next_highest.tif")
-        export_raster(next_highest_xarray, highpath)
-        # Export lowest
-        lowpath = os.path.join(self.output_subfolders[2], "next_lowest.tif")
-        export_raster(next_lowest_xarray, lowpath)
         # Export nearest to DEM
         ntdpath = os.path.join(self.output_subfolders[2], "nearest_to_dem.tif")
-        export_raster(nearest_to_dem, ntdpath)
+        export_raster(self.analysis_ds["NearestToDEM"], ntdpath)
 
-        return next_highest_xarray, next_lowest_xarray, nearest_to_dem
+        print(f" Exporting next highest and lowest rasters")
+        # Export next highest and lowest rasters
+        highpath = os.path.join(self.output_subfolders[2], "next_highest.tif")
+        export_raster(self.analysis_ds["NextHighestElevation"], highpath)
+        # Export lowest
+        lowpath = os.path.join(self.output_subfolders[2], "next_lowest.tif")
+        export_raster(self.analysis_ds["NextLowestElevation"], lowpath)
 
-    def compute_perc_chance(self, nh, nl, ng):
+    def compute_perc_chance(self):
         """
         Compute the percent chance
         """
-
+        nl = self.analysis_ds["NextLowestElevation"]
+        nh = self.analysis_ds["NextHighestElevation"]
+        ng = self.analysis_ds["NearestToDEM"]
         perc_chances = {}
 
         y2 = self.dem
@@ -410,7 +502,7 @@ class PercChanceGrids:
 
             # Export the percent chance
             print(f" Exporting percent chance")
-            pcpath = os.path.join(self.output_subfolders[3], f"perc{get_return_name(n)}_chance.tif")
+            pcpath = os.path.join(self.output_subfolders[3], f"perc{RETURN_NAME_LOOKUP.get(n, None)}_chance.tif")
             export_raster(x2, pcpath)
 
         return perc_chances
@@ -431,23 +523,29 @@ class PercChanceGrids:
         print(f"Value Raster, {self.vspecs.__repr__()}")
 
         # Open the valid raster
-        self.open_valid_xarray()
+        validity = self.open_valid_xarray()
         tb_times.append(process_time())
 
         # Open the DEM
-        self.open_dem_xarray()
+        self.open_dem_xarray(validity)
         tb_times.append(process_time())
 
         # Open the WSE rasters
         self.open_wse_xarrays()
         tb_times.append(process_time())
+        for t in tb_times:
+            print(f"Time: {round(t - t1_start, 1)} seconds")
 
-        # Compute the percent chance
-        next_high, next_low, nearest_grnd = self.compute_next_high_next_low()
+        # Fill the WSE rasters with DEM
+        self.fill_wse_with_dem()
         tb_times.append(process_time())
 
         # Compute the percent chance
-        pct_chances = self.compute_perc_chance(next_high, next_low, nearest_grnd)
+        self.compute_next_high_next_low()
+        tb_times.append(process_time())
+
+        # Compute the percent chance
+        pct_chances = self.compute_perc_chance()
         tb_times.append(process_time())
         print(f" Percent Chances: {pct_chances.keys()}")
         ds = xr.combine_by_coords(list(pct_chances.values()), fill_value=0.0, join="outer",
@@ -463,9 +561,9 @@ class PercChanceGrids:
 
 
 if __name__ == "__main__":
-    input_folder = r"E:\Iowa_1A\02_mapping\CoonYellow\Grids_CY\Perc_Chance_IN"
-    output_folder = r"E:\Iowa_1A\02_mapping\CoonYellow\Grids_CY\Perc_Chance_OUT"
-    dem_path = r"E:\Iowa_1A\02_mapping\CoonYellow\Grids_CY\DEM\ground_dem_CY.tif"
+    input_folder = r"E:\Iowa_1A\02_mapping\CoonYellow\Grids_CY\test_perc_chance"
+    output_folder = r"E:\Iowa_1A\02_mapping\CoonYellow\Grids_CY\test_perc_chance_OUT"
+    dem_path = r"E:\Iowa_1A\02_mapping\CoonYellow\Grids_CY\test_perc_chance\ground_dem_CY.tif"
 
     pcg = PercChanceGrids(input_folder, output_folder, dem_path)
     pcg.process_perc_chance()

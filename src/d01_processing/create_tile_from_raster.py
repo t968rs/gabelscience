@@ -163,7 +163,7 @@ class CreateRasterIndex:
                 if not tile_gdf.crs:
                     tile_gdf = tile_gdf.set_crs(crs=code, inplace=True)
                 filtered = tile_gdf[tile_gdf.in_crs == code].to_crs(f"EPSG:{code}")
-                filtered.to_file(out_shp)
+                filtered.to_file(out_shp, driver='ESRI Shapefile')
                 outputs.append(out_shp)
         else:
             out_shp = os.path.join(self.output_folder, f"Index_{self.outname_str}_{self.target_crs}.shp")
@@ -174,8 +174,8 @@ class CreateRasterIndex:
 
 
 if __name__ == "__main__":
-    root_raster_folder = r"E:\Iowa_1A\01_data\terrain\Mosaic_vhMeters_1A"
-    output_folder = r"E:\Iowa_1A\01_data\terrain"
+    root_raster_folder = r"E:\Iowa_1A\02_mapping\Grids_ApplePlum\04_FilledExtracts"
+    output_folder = r"E:\Iowa_1A\02_mapping\Grids_ApplePlum\04_FilledExtracts"
     target_crs = None
     move_files = False
 

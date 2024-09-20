@@ -1,13 +1,14 @@
 from dataclasses import dataclass
 from rasterio.coords import BoundingBox
 from rasterio.transform import Affine
-import dask.array as da
+from rasterio.crs import CRS
+import xarray as xr
 import rioxarray as rioxr
 import typing as T
 import os
 
 
-def get_valid_raster_area(path: T.Union[str, os.PathLike]) -> float:
+def get_valid_raster_area(path: T.Union[str, os.PathLike, xr.DataArray]) -> float:
     """
     Calculates the area of the dataset in square meters.
 
@@ -18,7 +19,10 @@ def get_valid_raster_area(path: T.Union[str, os.PathLike]) -> float:
     Returns:
         float: The area of the dataset in square meters.
     """
-    xa = rioxr.open_rasterio(path, chunks={"x": 2048, "y": 2048})
+    if not isinstance(path, xr.DataArray):
+        xa = rioxr.open_rasterio(path, chunks={"x": 2048, "y": 2048})
+    else:
+        xa = path
     d_a = xa.data
     valid_cells = d_a != xa.rio.nodata
     valid_count = valid_cells.sum().compute()
@@ -26,6 +30,30 @@ def get_valid_raster_area(path: T.Union[str, os.PathLike]) -> float:
     total_area = round(valid_count * abs(res[0]) * abs(res[1]))
     print(f"Total valid raster area: {total_area}")
     return total_area
+
+
+def get_formatted_file_sizes(path: T.Union[str, os.PathLike] = None,
+                             other_size=None) -> T.Tuple[float, float]:
+    from src.d00_utils.system import file_size
+    if path:
+        size_str, size_float, units = file_size(path)
+    elif other_size:
+        size_str, size_float, units = other_size
+    else:
+        raise ValueError("Either path or other_size must be provided")
+    if units == "GB":
+        size_mb = round(size_float * 1024, 0)
+        size_gb = round(size_float, 1)
+    elif units == "MB":
+        size_mb = round(size_float, 1)
+        size_gb = round(size_float / 1024, 2)
+    elif units == "KB":
+        size_mb = round(size_float / 1024, 2)
+        size_gb = round(size_float / (1024 * 1024), 3)
+    else:
+        size_mb = round(size_float / (1024 * 1024), 3)
+        size_gb = round(size_float / (1024 * 1024 * 1024), 4)
+    return size_mb, size_gb
 
 
 @dataclass
@@ -41,7 +69,7 @@ class RasterSpecs:
     cellsizes: T.Tuple[float, float]
     path: T.Union[str, object]
     transform: T.Union[str, Affine]
-    crs: T.Union[str, object]
+    crs: T.Union[str, object, CRS]
     valid_area: float = None
 
     def __post_init__(self):
@@ -59,25 +87,56 @@ class RasterSpecs:
 
         attrs = self.__dir__()
         values = [repr(getattr(self, attr)) for attr in attrs]
-        transform_repr = self.transform_str()
-        repr_str = (f"{self.__class__.__name__}\n" + ' '
-                    .join(f"{attr}: {value}\n" for attr, value in zip(attrs, values) if attr != 'transform'))
-        return repr_str + f"{transform_repr}"
 
-    def transform_str(self):
+        repr_str = (f"{self.__class__.__name__:^12}\n\t\t" + '\t\t'
+                    .join(f"{attr:>12}: {value:>12}\n" for attr, value in zip(attrs, values)
+                          if attr not in ['transform', 'crs', 'bounds']))
+        return repr_str + self.crs_repr() + self.bounds_repr() + f"\n\t{self.transform_repr()}"
+
+    def transform_repr(self):
         # Determine the maximum width needed for any value in the transform for proper alignment
-        max_width = max(len(f"{getattr(self.transform, attr)}") for attr in ['a', 'b', 'c', 'd', 'e', 'f'])
-        max_width = int(round(max_width * 0.75))
 
         # Format each line with the values aligned according to the maximum width
         # Format each line with the values left-aligned according to the maximum width
-        line0 = "transform:"
-        line1 = (f"\t| {self.transform.a:<{max_width}}, {self.transform.b:<{max_width}}, "
-                 f"{round(self.transform.c, 10):<{max_width}} |")
-        line2 = (f"\t| {self.transform.d:<{max_width}}, {self.transform.e:<{max_width}}, "
-                 f"{round(self.transform.f, 10):<{max_width}} |")
-        line3 = f"\t| {0:<{max_width}}, {0:<{max_width}}, {1:<{max_width}} |"  # Last line is always the same
+        a, b, c = self.transform.a, self.transform.b, self.transform.c
+        d, e, f = self.transform.d, self.transform.e, self.transform.f
+        for variable in ["a", "b", "c", "d", "e", "f"]:
+            val = locals().get(variable, None)
+            if val:
+                newval = str(val)[:15]
+                locals()[variable] = newval
+
+        spacer = " " * 14
+        k = "transform"
+        endcaps = " | "
+        line0 = f"\t{k:>12}: {spacer:>12}"
+        line1 = f"{endcaps:<5}{a:<20}, {b:<20}, {c:<20}{endcaps:<20}"
+        line2 = f"{endcaps:<5}{d:<20}, {e:<20}, {f:<20}{endcaps:<20}"
+        line3 = f"{endcaps:<5}{0:<20}, {0:<20}, {1:<20}{endcaps:<20}"  # Last line is always the same
         return f"{line0}\n{line1}\n{line2}"
+
+    def crs_repr(self):
+        k = "crs"
+        if self.crs.is_epsg_code:
+            v = f"EPSG:{self.crs.to_epsg()}"
+            crs_repr = f"\t\t{k:>12}: {v:>12}\n"
+        else:
+            crs_repr = f"\t{k:>12}: {str(self.crs):>12}"
+        return crs_repr
+
+    def bounds_repr(self):
+        k = "bounds"
+        bounds_parts = str(self.bounds).split(',')
+        bp = []
+        for p in bounds_parts:
+            p = p.strip().replace('(', '').replace(')', '')
+            p = p[:15]
+            bp.append(p)
+        spacer = " " * 14
+        bounds_str = (f"\t\t{k:>12}: {spacer:>12}"
+                      f"\n{spacer:>20}{bp[0]:>20}, \n{spacer:>20}{bp[1]:>20}, "
+                      f"\n{spacer:>20}{bp[2]:>20}, \n{spacer:>20}{bp[3]:>20}")
+        return bounds_str
 
     def as_dict(self):
         ordered_keys = self.__dir__()
@@ -92,7 +151,7 @@ class RasterSpecs:
 
 def create_raster_specs_from_path(path, calc_valid_area=False):
     import rasterio
-    from src.d00_utils.system import file_size
+
     """
     Create a RasterSpecsObject from a raster file path using rasterio.
     """
@@ -101,19 +160,8 @@ def create_raster_specs_from_path(path, calc_valid_area=False):
     else:
         valid_area = None
 
-    size_str, size_float, units = file_size(path)
-    if units == "GB":
-        size_mb = round(size_float * 1024, 0)
-        size_gb = round(size_float, 1)
-    elif units == "MB":
-        size_mb = round(size_float, 0)
-        size_gb = round(size_float / 1024, 1)
-    elif units == "KB":
-        size_mb = round(size_float / 1024, 0)
-        size_gb = round(size_float / (1024 * 1024), 1)
-    else:
-        size_mb = round(size_float / (1024 * 1024), 0)
-        size_gb = round(size_float / (1024 * 1024 * 1024), 1)
+    size_mb, size_gb = get_formatted_file_sizes(path)
+
     with rasterio.open(path) as src:
         bbox = BoundingBox(*src.bounds)
         bbox = (bbox.left, bbox.bottom, bbox.right, bbox.top)
@@ -132,3 +180,31 @@ def create_raster_specs_from_path(path, calc_valid_area=False):
             crs=src.crs,
             valid_area=valid_area
         )
+
+
+def create_raster_specs_from_xarray(array, calc_valid_area=False):
+    from src.d00_utils.system import convert_bytes
+    if calc_valid_area:
+        valid_area = get_valid_raster_area(array)
+    else:
+        valid_area = None
+    array_size = array.nbytes
+    size_str = convert_bytes(array_size)
+    size, units = size_str.split(" ")
+    sizef = float(size)
+    size_mb, size_gb = get_formatted_file_sizes(other_size=(size_str, sizef, units))
+
+    return RasterSpecs(
+        res=round(abs(array.rio.resolution()[0]), 6),  # assuming square pixels
+        height=array.rio.height,
+        width=array.rio.width,
+        epsg=array.rio.crs.to_epsg(),
+        size_mb=size_mb,
+        size_gb=size_gb,
+        bounds=array.rio.bounds(),
+        cellsizes=array.rio.resolution(),
+        path=None,
+        transform=array.rio.transform(),
+        crs=array.rio.crs,
+        valid_area=valid_area
+    )

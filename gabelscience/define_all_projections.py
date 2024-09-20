@@ -1,5 +1,4 @@
 import os
-
 import rasterio
 
 
@@ -87,8 +86,8 @@ class DefinIowaProjections:
 
 
 if __name__ == "__main__":
-    infolder = r"E:\pinal_2023\02_mapping\rasters\05_WSE_Processed"
-    other_crs = 102649
+    infolder = r"E:\Iowa_1A\02_mapping\CoonYellow\Grids_CY"
+    other_crs = 3417
 
     initialize = DefinIowaProjections(infolder, other_crs)
     initialize.define_projections()

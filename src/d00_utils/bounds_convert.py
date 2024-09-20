@@ -91,7 +91,8 @@ def bbox_to_gdf(bbox_tuple, crs, name_str=None, outfolder=None) -> gpd.GeoDataFr
     if outfolder is not None and name_str is not None:
         outpath = os.path.join(outfolder, f"box_test_{name_str}.shp")
         gdf.to_file(outpath)
-    print(f'\n  Created pg from bounds\n {type(gdf)}')
+        print(f"  Created: {outpath}")
+    print(f'\n  Created pg from bounds\n')
 
     return gdf
 

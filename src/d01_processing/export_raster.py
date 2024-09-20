@@ -5,7 +5,7 @@ import threading
 import xarray as xr
 
 
-def test_export_array(array, folder: str, line):
+def test_export_array(array, folder: str, line: int):
     """Export an array to a tif file for testing purposes"""
 
     # Export file naming
@@ -40,7 +40,7 @@ def test_export_array(array, folder: str, line):
         array.rio.to_raster(outpath, tiled=True, lock=threading.Lock(), compress='LZW',
                             windowed=True, bigtiff="YES")
     print(f"TEST EXPORT PATH: {outpath}")
-    print(f'TEST EXPORT: \n --- \n {array}\n')
+    # print(f'TEST EXPORT: \n --- \n {array}\n')
 
 
 def export_raster(array: [xr.DataArray, xr.Dataset],
@@ -52,13 +52,30 @@ def export_raster(array: [xr.DataArray, xr.Dataset],
         ds = array
         for varname in array.rio.vars:
             array = ds[varname]
-            array.rio.write_nodata(array.rio.nodata, inplace=True, encoded=False)
-            array.rio.to_raster(outpath, tiled=True, lock=threading.Lock(), compress='LZW',
-                                windowed=True, bigtiff="YES")
+            if array.dtype == "float32":
+                nodata = -9999
+            else:
+                nodata = array.rio.nodata
+            array.rio.write_nodata(nodata, inplace=True, encoded=False)
+
+            # Write it out
+            try:
+                array.rio.to_raster(outpath, tiled=True, lock=threading.Lock(), compress='LZW',
+                                    windowed=True, bigtiff="YES")
+            except Exception as e:
+                print(f"ERROR LN 66: {e}")
+                os.remove(outpath)
     else:
         array.rio.write_nodata(array.rio.nodata, inplace=True, encoded=False)
-        array.rio.to_raster(outpath, tiled=True, lock=threading.Lock(), compress='LZW',
-                            windowed=True, bigtiff="YES")
+
+        # Write it out
+        try:
+            array.rio.to_raster(outpath, tiled=True, lock=threading.Lock(), compress='LZW',
+                                windowed=True, bigtiff="YES")
+        except Exception as e:
+            print(f"ERROR LN 76: {e}")
+            os.remove(outpath)
+
     print(f"EXPORT PATH: {outpath}")
-    print(f'EXPORT: \n --- \n {array}\n')
+    # print(f'EXPORT: \n --- \n {array}\n')
     return outpath
