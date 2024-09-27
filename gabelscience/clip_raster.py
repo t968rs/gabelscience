@@ -290,8 +290,8 @@ if __name__ == "__main__":
     operation_type = "clip only"
     exact_or_touched = True
 
-    alt_output_filename = None
-    folder = True  # r"E:\Iowa_1A\02_mapping\Grids_Lower_Wap\03_DRAFT_DFIRM"
+    alt_output_filename = "test"
+    folder = False  # r"E:\Iowa_1A\02_mapping\Grids_Lower_Wap\03_DRAFT_DFIRM"
     raster_file = r"E:\pinal_2023\02_mapping\rasters\05_WSE_Processed\WSE_01pct_West_Zone_A1.tif"
     if folder:
         for gridtype in ["Depth", "WSE"]:

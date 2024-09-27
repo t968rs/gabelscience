@@ -18,10 +18,26 @@ class RasterFinder:
     def raster_exts(self) -> list:
         return [".img", ".tif"]
 
-    def _get_rasters_from_folder(self):
-        for root, folders, files in os.walk(self.folder):
-            for file in files:
-                path = os.path.join(root, file)
+    def _get_rasters_from_folder(self, recursive=True):
+        if recursive:
+            for root, folders, files in os.walk(self.folder):
+                for file in files:
+                    path = os.path.join(root, file)
+                    parts = list(path.lower().split("."))
+                    period_parts = ["." + str(p) for p in parts]
+                    if not set(self.raster_exts).isdisjoint(set(period_parts)):
+                        file_ext = list(set(self.raster_exts).intersection(set(period_parts)))[0]
+                        # print(f'File ext: {file_ext}')
+                        no_append = False
+                        if not set(period_parts).isdisjoint(self.bad_exts[file_ext]):
+                            no_append = True
+                        if not no_append:
+                            filename = file.split(file_ext)[0]
+                            self.raster_dict[filename] = {"ext": file_ext, "path": path}
+                            self.raster_list.append(path)
+        else:
+            for file in os.listdir(self.folder):
+                path = os.path.join(self.folder, file)
                 parts = list(path.lower().split("."))
                 period_parts = ["." + str(p) for p in parts]
                 if not set(self.raster_exts).isdisjoint(set(period_parts)):
@@ -41,18 +57,22 @@ class RasterFinder:
             self.folder = folder
         self._get_rasters_from_folder()
 
-    def get_raster_dictionary(self, folder):
+    def get_raster_dictionary(self, folder, recurse=True):
         self._populate_folder(folder)
-        self._get_rasters_from_folder()
+        self._get_rasters_from_folder(recurse)
         return self.raster_dict
 
-    def get_raster_list(self, folder):
+    def get_raster_list(self, folder, recurse=True):
         self._populate_folder(folder)
-        self._get_rasters_from_folder()
+        self._get_rasters_from_folder(recurse)
         return self.raster_list
 
 
+def get_raster_list(folder, recursive=True):
+    rf = RasterFinder()
+    return rf.get_raster_list(folder, recursive)
 
 
-
-
+def get_raster_dict(folder, recursive=True):
+    rf = RasterFinder()
+    return rf.get_raster_dictionary(folder, recursive)
