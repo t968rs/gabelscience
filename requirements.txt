@@ -10,7 +10,7 @@ setuptools~=71.0.3
 folium~=0.17.0
 matplotlib
 requests~=2.32.3
-fiona~=1.9.6
+fiona~=1.10b2
 geocube~=0.5.2
 affine~=2.4.0
 pandas~=2.2.2
