@@ -6,3 +6,4 @@ zbase_env/
 /test_data/downloads/
 *.log
 *__pycache__/
+*.idea/
