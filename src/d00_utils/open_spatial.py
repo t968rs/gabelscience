@@ -2,7 +2,7 @@ import geopandas as gpd
 import os
 
 
-def open_fc_any(fc_path):
+def open_fc_any(fc_path, keeper_columns=None):
     """
     Opens a feature class from a given file path and returns it as a GeoDataFrame.
 
@@ -21,12 +21,13 @@ def open_fc_any(fc_path):
         # If the dataset test path is not equal to the feature class, read from the dataset test path
         if ds_test != fc:
             print(f'GDB Path: {ds_test}, FC: {fc}')
-            gdf = gpd.read_file(ds_test, driver='FileGDB', layer=fc)
+            to_read = ds_test
         else:
             # Otherwise, read from the geodatabase path
             print(f'GDB Path: {gdbpath}, FC: {fc}')
-            gdf = gpd.read_file(gdbpath, driver='FileGDB', layer=fc)
+            to_read = gdbpath
+        gdf = gpd.read_file(to_read, driver='FileGDB', layer=fc, columns=keeper_columns)
     else:
         # If not a File Geodatabase, read the file directly
-        gdf = gpd.read_file(fc_path)
+        gdf = gpd.read_file(fc_path, columns=keeper_columns)
     return gdf

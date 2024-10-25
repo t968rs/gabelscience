@@ -1,5 +1,6 @@
 import bs4.element
 import pandas as pd
+import os
 from bs4 import BeautifulSoup
 
 CHECK_TYPES = ["Topology", "Attribute", "Schema", "Spatial"]
@@ -77,9 +78,15 @@ def summarize_df(df):
 
 if __name__ == "__main__":
     # Create a DataFrame from the extracted data
-    url = "../test_data/downloads/FIRM DB QA Submission Report_LNM_2024_0913_1848.htm"
+    url = r"E:\Iowa_3B\02_WORKING\Rock_Little_Big_Sioux\Rock_Little_Big_Sioux_Mapping\FIRM DB QA Submission Report_rock.htm"
+    area, date = "Rock", "2024_1022"
     df = extract_MIP_Report_info(url)
-    df.to_excel("../test_data/downloads/MIP_Report_Info_CD_LNM_2024_0913_0333.xlsx", index=False)
+
+    # Save the DataFrame to an Excel file
+    base, filename = os.path.split(url)
+    name, ext = os.path.splitext(filename)
+    outpath = os.path.join(base, f"MIP_Report_{area}_{date}.xlsx")
+    df.to_excel(outpath, index=False)
 
     # Display the DataFrame
     print(df)

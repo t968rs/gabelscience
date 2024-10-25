@@ -1,23 +1,20 @@
-import geopandas as gpd
-import numpy as np
-import pandas as pd
-import typing as T
-from src.specs import literals
-from src.specs.raster_specs import create_raster_specs_from_path
-from src.d00_utils.system import file_size, get_system_memory
-from src.d00_utils.regular_grids import create_regular_grid
-from src.d03_show import cplotting, printers
 import os
-import shapely
-from shapely.geometry import Point
-import concurrent.futures
+import typing as T
 import dask
 import dask.array as da
 import dask.dataframe as dd
-from dask.diagnostics import ProgressBar
 import dask_geopandas
+import geopandas as gpd
+import pandas as pd
 import rioxarray as rioxr
+import shapely
 import xarray as xr
+from dask.diagnostics import ProgressBar
+
+from src.d00_utils.regular_grids import create_regular_grid
+from src.d00_utils.system import get_system_memory
+from src.d03_show import cplotting, printers
+from src.specs.raster_specs import create_raster_specs_from_path
 
 
 class ShrinkwrapRaster:
@@ -161,11 +158,10 @@ class ShrinkwrapRaster:
             gddf = delayed_buff.compute()
 
         # Split it up for processing
-        grid_gdf, n_cells, grid_features = create_regular_grid(gddf, n_cells=(10, 10),
+        grid_gdf, n_cells, grid_features = create_regular_grid(gdf, n_cells=(10, 10),
                                                                epsg_code=self.epsg_code,
                                                                overlap=False)
-        grid_gdf.to_file(os.path.join(self.vector_folder, "grid.shp"), engine="fiona", index=True)
-        intersected = grid_gdf.overlay(gddf, how='intersection', keep_geom_type=True)
+        intersected = grid_gdf.overlay(gdf, how='intersection', keep_geom_type=True)
         intersected = intersected.explode(index_parts=False).loc[:, ["geometry"]]
         intersected["values"] = 1
         print(f' Prepped polygons\n {intersected.columns}')
@@ -177,7 +173,7 @@ class ShrinkwrapRaster:
         ds = rioxr.open_rasterio(self.raw_raster, chunks={"x": 2048, "y": 2048},
                                  lock=False, band_as_variable=True)
         print(f"\n----- Input Raster:\n{ds}")
-        ds = ds.rename_vars({"band_1": "food_raster"})
+        ds = ds.rename_vars({"band_1": "flood_raster"})
         variable0 = [v for v in ds.data_vars][0]
         nodata_value = ds[variable0].rio.nodata
         print(f' {variable0} NODATA: {nodata_value}')
@@ -186,10 +182,12 @@ class ShrinkwrapRaster:
         # Process ones mask option
         ones_array = xr.ones_like(ds[variable0], dtype="int8")
         ones_array = ones_array.rio.write_crs(self.crs, inplace=True)
-        ones_array = ones_array.where(ones_array == 1, 0)
+        ones_array = xr.where(ds[variable0] != nodata_value, ones_array, 0)
         ones_array.rio.write_nodata(0, inplace=True)
 
-        return ones_array
+        ds["ones_mask"] = ones_array
+
+        return ds.chunk({"x": 2048, "y": 2048})
 
     @staticmethod
     def create_geometry(df):
@@ -200,35 +198,15 @@ class ShrinkwrapRaster:
 
         self._create_output_folders()
         # self.import_and_buffer_polygons()
-        darray = self.open_raster_as_ones()
-        print(f'Data from d Array: {darray}, {darray.shape}')
-        x, y, v = darray.x.values, darray.y.values, darray.values
-        # Make Dask arrays from Numpy arrays and divide computation into chunks
-        chunks_size = 2048  # replace 4 with number of cores
-        x_da = da.from_array(x, chunks=chunks_size)
-        y_da = da.from_array(y, chunks=chunks_size)
-        v_da = da.from_array(v, chunks=chunks_size)
+        ds = self.open_raster_as_ones()
+        print(f'Data from d Array: {ds}')
+        ds = ds.drop_vars([v for v in ds.data_vars if v != "ones_mask"])
 
-        # Generate a 2D grid
-        y_grid, x_grid = da.meshgrid(y_da, x_da)
+        # Import polygons
+        self.import_and_buffer_polygons()
 
-        # Flatten the arrays
-        x_da = x_grid.flatten()
-        y_da = y_grid.flatten()
-        v_da = v_da.flatten()
-        print('Got meshgrid and flattened arrays..')
-
-        # Convert to GPD // Dask GPD
-        data_dict = {'x': x_da, 'y': y_da, 'ones_mask': v_da}
-        print(f' Valid pixels to vectorize: {len(v_da)}')
-        ddf = dd.concat([dd.from_dask_array(data_dict[col]).rename(col) for col in data_dict], axis=1)
-        print(f'DDF: \n {ddf}')
-        ddf['geometry'] = dask_geopandas.points_from_xy(ddf, "x", "y", "ones_mask")
-        gddf = dask_geopandas.from_dask_dataframe(ddf, geometry="geometry")
-        print(f"Dask GPD: \n{gddf}")
-
-        with ProgressBar():
-            gdf_out = gddf.compute()
+        # Create clipped raster
+        ds = self.clip_it(ds, self.processing_gdf, self.crs, alltouched=True)
 
         # Plot / Export
         cplotting.plot_map_data_to_html(gdf_out, self.output_folder, "points")

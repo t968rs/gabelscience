@@ -86,7 +86,7 @@ class DefinIowaProjections:
 
 
 if __name__ == "__main__":
-    infolder = r"E:\Iowa_1A\02_mapping\CoonYellow\Grids_CY"
+    infolder = r"E:\Iowa_3B\02_mapping\Maple_Mapping\NH_NL_Grids"
     other_crs = 3417
 
     initialize = DefinIowaProjections(infolder, other_crs)

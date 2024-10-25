@@ -66,7 +66,7 @@ def create_regular_grid(gdf: gpd.GeoDataFrame = None,
 
     # Add grid_id and grid_area columns
     cells_gdf['grid_id'] = range(len(cells_gdf))
-    cells_gdf['grid_area'] = round(cells_gdf['geometry'].area, 2).astype("float32")
+    cells_gdf['grid_area'] = gdf.geometry.area.apply(lambda x: int(round(x, 0)))
 
     return cells_gdf, n_cells, len(grid_cells)
 

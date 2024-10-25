@@ -78,6 +78,13 @@ class RasterSpecs:
         if not (isinstance(self.cellsizes, tuple) and len(self.cellsizes) == 2):
             raise ValueError(f"Expected cellsizes to be a tuple of two floats, got {type(self.cellsizes)}")
 
+    def update(self, **kwargs):
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+            else:
+                raise AttributeError(f"'RasterSpecs' object has no attribute '{key}'")
+
     def __str__(self):
         attrs = self.__dir__()
         values = [getattr(self, attr) for attr in attrs]
@@ -182,8 +189,16 @@ def create_raster_specs_from_path(path, calc_valid_area=False):
         )
 
 
-def create_raster_specs_from_xarray(array, calc_valid_area=False):
+def create_raster_specs_from_xarray(array, calc_valid_area=False, **kwargs):
     from src.d00_utils.system import convert_bytes
+
+    if not isinstance(array, xr.DataArray):
+        import dask.array as da
+        if isinstance(array, da.Array):
+            transform = kwargs.get("transform")
+            crs = kwargs.get("crs")
+            array = dask_to_rioxarray(array, transform=transform, crs=crs)
+
     if calc_valid_area:
         valid_area = get_valid_raster_area(array)
     else:
@@ -208,3 +223,27 @@ def create_raster_specs_from_xarray(array, calc_valid_area=False):
         crs=array.rio.crs,
         valid_area=valid_area
     )
+
+
+def dask_to_rioxarray(array, transform, crs):
+    """
+    Convert a Dask array to a rioxarray DataArray with proper coordinates and dimensions.
+    """
+    import numpy as np
+
+    # Create coordinate arrays for 'x' and 'y'
+    y_coords = np.arange(array.shape[0]) * transform[4] + transform[5]
+    x_coords = np.arange(array.shape[1]) * transform[0] + transform[2]
+
+    # Create the DataArray with the correct dimensions and coordinates
+    data_array = xr.DataArray(
+        array,
+        dims=['y', 'x'],
+        coords={'y': y_coords, 'x': x_coords}
+    )
+
+    # Assign the CRS and transform to the DataArray
+    data_array = data_array.rio.write_crs(crs)
+    data_array = data_array.rio.write_transform(transform)
+
+    return data_array.chunk({"x": 2048, "y": 2048})

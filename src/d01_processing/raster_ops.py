@@ -2,6 +2,7 @@ import xarray as xr
 import rioxarray as rioxr
 import numpy as np
 import threading
+import dask.array as da
 
 
 def mask_with_ones(input_ds, key_string=None) -> xr.DataArray:
@@ -34,4 +35,54 @@ def mask_with_ones(input_ds, key_string=None) -> xr.DataArray:
     input_array.rio.set_nodata(-1, inplace=True)
     print(f' Ones mask array: {ones_array}')
     return input_array
+
+
+def numpy_to_rioxarray(array, profile):
+    """
+    Convert a NumPy array to a rioxarray DataArray with proper coordinates and dimensions.
+    """
+    # Extract the transform and CRS from the profile
+    print("\tInput is NumPy array")
+    transform = profile['transform']
+    crs = profile['crs']
+
+    # Create coordinate arrays for 'x' and 'y'
+    y_coords = np.arange(array.shape[0]) * transform[4] + transform[5]
+    x_coords = np.arange(array.shape[1]) * transform[0] + transform[2]
+
+    # Create the DataArray with the correct dimensions and coordinates
+    data_array = xr.DataArray(
+        array,
+        dims=['y', 'x'],
+        coords={'y': y_coords, 'x': x_coords}
+    )
+
+    # Assign the CRS and transform to the DataArray
+    data_array = data_array.rio.write_crs(crs)
+    data_array = data_array.rio.write_transform(transform)
+
+    return data_array.chunk({"x": 2048, "y": 2048})
+
+
+def dask_to_rioxarray(array, transform, crs):
+    """
+    Convert a Dask array to a rioxarray DataArray with proper coordinates and dimensions.
+    """
+
+    # Create coordinate arrays for 'x' and 'y'
+    y_coords = np.arange(array.shape[0]) * transform[4] + transform[5]
+    x_coords = np.arange(array.shape[1]) * transform[0] + transform[2]
+
+    # Create the DataArray with the correct dimensions and coordinates
+    data_array = xr.DataArray(
+        array,
+        dims=['y', 'x'],
+        coords={'y': y_coords, 'x': x_coords}
+    )
+
+    # Assign the CRS and transform to the DataArray
+    data_array = data_array.rio.write_crs(crs)
+    data_array = data_array.rio.write_transform(transform)
+
+    return data_array.chunk({"x": 2048, "y": 2048})
 

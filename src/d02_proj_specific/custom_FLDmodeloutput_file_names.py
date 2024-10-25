@@ -109,12 +109,13 @@ def batch_rename(file_dict):
 
         if not os.path.exists(newpath):
             print(f'New Path: {newpath}')
-            os.rename(path, newpath)
+            if not os.path.exists(newpath):
+                os.rename(path, newpath)
         else:
             print(f'Skipping {file}')
 
 
-inloc = r'E:\Iowa_3B\01_data\10230002_Floyd\grid_dl'
+inloc = r'E:\Iowa_3B\01_data\LittleSioux_Grids\dl'
 raster_dict = create_raster_grid_list(folder=inloc)
 for k, v in raster_dict.items():
     print(f'Found: {k}')

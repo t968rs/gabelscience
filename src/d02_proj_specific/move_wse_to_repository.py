@@ -83,8 +83,8 @@ class MoveFiles:
 
 if __name__ == "__main__":
     string_list = ["0_2pct", "01pct", "01plus", "02pct", "04pct", "10pct"]  # "0_2pct", "01pct",
-    infolder = r"E:\Iowa_3B\01_data\10230002_Floyd\grid_dl"
-    outfolder = r"E:\Iowa_3B\01_data\10230002_Floyd\repo"
+    infolder = r"E:\Iowa_3B\01_data\LittleSioux_Grids\dl"
+    outfolder = r"E:\Iowa_3B\01_data\LittleSioux_Grids\repo"
     limiting_string = "wse_"
     extension = ".tif"
     for i, lstring in enumerate(string_list):

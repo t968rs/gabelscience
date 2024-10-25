@@ -15,7 +15,7 @@ import dask.array as da
 from dask.diagnostics import ProgressBar
 from src.d00_utils.bounds_convert import bbox_to_gdf
 import matplotlib.pyplot as plt
-import time
+
 
 
 def setup_logger():

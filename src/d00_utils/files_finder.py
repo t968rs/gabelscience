@@ -55,7 +55,6 @@ class RasterFinder:
     def _populate_folder(self, folder):
         if not self.folder:
             self.folder = folder
-        self._get_rasters_from_folder()
 
     def get_raster_dictionary(self, folder, recurse=True):
         self._populate_folder(folder)

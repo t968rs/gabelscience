@@ -3,17 +3,19 @@ import numpy as np
 import pyresample as pyr
 import dask.config
 import dask.array as da
+import dask_image.ndinterp as ndinterp
 import rasterio
-from rasterio.enums import Resampling
-from rasterio.transform import from_bounds
-from rasterio.warp import calculate_default_transform, reproject
+from mpl_toolkits.mplot3d.proj3d import transform
 from rasterio.mask import mask
+import rasterio.windows
+from dask.diagnostics import ProgressBar
+
 from src.d00_utils.bounds_convert import bbox_to_gdf
 import logging
 from src.specs.raster_specs import create_raster_specs_from_path, create_raster_specs_from_xarray
 from src.d00_utils.files_finder import get_raster_list
 from src.d01_processing.export_raster import *
-from src.d03_show.plot_raster import plot_raster
+from src.d03_show.plot_raster import plot_raster, plot_histogram
 from rasterio.plot import show, show_hist
 
 
@@ -32,12 +34,86 @@ def setup_logger():
     logger.addHandler(file_handler)
     return logger
 
+def resample_block(dem_block, input_area_def, valid_area_def):
+    resampler = pyr.kd_tree.NumpyResamplerBilinear(input_area_def, valid_area_def)
+    return resampler.resample(dem_block).image_data
 
 def gen_area_def(vspecs):
     return pyr.area_config.create_area_def(area_id="valid_area", projection=vspecs.crs,
                                            description="Valid Area for Percent Chance Analysis",
                                            area_extent=vspecs.bounds, resolution=vspecs.cellsizes,
                                            nprocs=10, verbose=True)
+
+
+def get_higher_lower_pct_return(pct_grids, varname):
+    min_return, max_return = min(RETURNS.keys()), max(RETURNS.keys())
+
+    categorical = pct_grids[varname]
+    bins = pct_grids['bins']
+
+    # Iterate through the RETURNS dictionary
+    for return_ord, return_pct in RETURNS.items():
+        lower_return = RETURNS.get(return_ord - 1, RETURNS[min_return])
+        higher_return = RETURNS.get(return_ord + 1, RETURNS[max_return])
+
+        # Get equivalent locations using the bin index
+        return_index = np.digitize([return_pct], bins, right=False)[0] - 1
+        equiv = categorical == return_index
+
+        # Update NextLowestPct grid
+        pct_grids['NextLowestPct'] = da.where(equiv, lower_return, pct_grids['NextLowestPct'])
+
+        # Update NextHighestPct grid
+        pct_grids['NextHighestPct'] = da.where(equiv, higher_return, pct_grids['NextHighestPct'])
+
+    return pct_grids
+
+
+def calc_stats_dask(array, nodata=-9999):
+    # Update the stats attributes
+    if not isinstance(array, da.Array):
+        print("Array is not a dask array")
+        print(f" Array: {array}, \n\tType: {type(array)}")
+    array_not_null = da.where(array != nodata, array, np.nan)
+
+    mean, std, max_val, min_val, count = (da.nanmean(array_not_null).round(2),
+                                          da.nanstd(array_not_null).round(2),
+                                          da.nanmax(array_not_null).round(2),
+                                          da.nanmin(array_not_null).round(2),
+                                          da.count_nonzero(array_not_null).round(2))
+
+    print(f" \tGetting Stats...")
+    with ProgressBar():
+        mean, std, max_val, min_val, count = dask.compute(mean, std, max_val, min_val, count)
+
+    stats = {
+        "STATISTICS_STDDEV": std,
+        "STATISTICS_MEAN": mean,
+        "STATISTICS_MAXIMUM": max_val,
+        "STATISTICS_COUNT": count,
+        "STATISTICS_MINIMUM": min_val,
+    }
+
+    for key, value in stats.items():
+        if "STATISTICS" in key:
+            key = key.split("STATISTICS_")[1]
+        print(f"\t\t{key}: {value}")
+
+    return stats
+
+
+def auto_chunk_dask(array, chunk_size=2048):
+    if not isinstance(array, da.Array):
+        return
+    da_shape = array.shape
+    # print(f"\t\tDA Shape: {da_shape}")
+    if len(da_shape) == 2:
+        chunks = (chunk_size, chunk_size)
+    elif len(da_shape) == 3:
+        chunks = (chunk_size, chunk_size, 1)
+    else:
+        raise ValueError(f"Array shape not supported: {da_shape}")
+    return array.rechunk(chunks)
 
 
 # then call this function:
@@ -66,10 +142,10 @@ class PercentAnnualChanceNumpy:
         self.return_paths = {}
         self.xarrays_ready = {}
         self.valid_gdf = None
-        self.dem = np.array([])
+        self.dem = None
         self.empty_valid = None
-        self.analysis_ds = np.array([])
-        self.high_low_ds = np.array([])
+        self.analysis_ds = {}
+        self.high_low_ds = {}
         self.valid_loc = None
 
         # Find the WSE rasters
@@ -131,28 +207,44 @@ class PercentAnnualChanceNumpy:
         """
         Open the valid raster and DEM using NumPy and rasterio
         """
+
+        with rasterio.open(self.input_dem_path) as src:
+            dem_window = rasterio.windows.get_data_window(src.read(1), nodata=-9999)
         with rasterio.open(self.return_paths[10]) as src:
             valid_array = src.read(1)
+
+            # Crop the valid raster to the DEM window
+            valid_window = rasterio.windows.get_data_window(valid_array, nodata=-9999)
+            valid_window = valid_window.intersection(dem_window)
+            valid_transform = rasterio.windows.transform(valid_window, src.transform)
+            valid_bounds = rasterio.windows.bounds(valid_window, valid_transform)
+            valid_array = valid_array[valid_window.row_off:valid_window.row_off + valid_window.height,
+                            valid_window.col_off:valid_window.col_off + valid_window.width]
             profile = src.profile
+            profile.update(transform=valid_transform, nodata=-9999, bounds=valid_bounds, valid_window=valid_window)
+
+            # Calculate bounds
+            self.valid_gdf = bbox_to_gdf(valid_bounds, self.vspecs.crs, "valid_bounds", self.output_path)
+            self.valid_profile = profile
+            self.vspecs.update(bounds=valid_bounds, transform=valid_transform)
 
         # Round it to 2 decimal places
         valid_array = da.from_array(valid_array, chunks=(2048, 2048))
         valid_array = valid_array.round(2)
+        outpath = os.path.join(self.output_subfolders[4], "valid_array.tif")
+        zero_array = da.where(valid_array != -9999, 1, 99)
+        with rasterio.open(outpath, 'w', **profile) as dst:
+            dst.write(zero_array, 1)
 
         # Export the valid raster
-        profile.update(nodata=-9999)
-        valid_array[valid_array == src.nodata] = -9999
-        export_raster(valid_array, os.path.join(self.output_subfolders[1], "WSE_0_2pct.tif"), profile=profile)
+
+        print(self.vspecs.__repr__())
+        # print(f"CRS: {self.vspecs.crs}")
+        export_raster(valid_array, os.path.join(self.output_subfolders[1], "WSE_0_2pct.tif"),
+                      profile=profile, crs=self.vspecs.crs)
 
         # Store TF valid locations
         self.valid_loc = valid_array != -9999
-        # test_valid = np.where(self.valid_loc, 1, 99)
-        # test_export_array(test_valid, self.output_subfolders[4], 123)
-
-        # Calculate bounds
-        bounds = src.bounds
-        self.valid_gdf = bbox_to_gdf(bounds, self.vspecs.crs, "valid_bounds", self.output_path)
-        self.valid_profile = profile
 
         # Creat empty valid array
         self.empty_valid = np.ones_like(valid_array, dtype=np.float32)
@@ -168,7 +260,10 @@ class PercentAnnualChanceNumpy:
         """
         with rasterio.open(self.input_dem_path) as src:
             # Crop DEM to valid raster
-            dem_array, transform = mask(src, self.valid_gdf.geometry, crop=True, pad=True, all_touched=True)
+            dem_array, transform = mask(src, self.valid_gdf.geometry, crop=True, pad=True, all_touched=False)
+            dem_array = dem_array[self.valid_profile['valid_window'].row_off:self.valid_profile['valid_window'].row_off +
+                                    self.valid_profile['valid_window'].height, self.valid_profile['valid_window'].col_off:
+                                    self.valid_profile['valid_window'].col_off + self.valid_profile['valid_window'].width]
             # show(dem_array, transform=transform)
             profile = src.profile
             dem_array = da.from_array(dem_array[0], chunks=(2048, 2048))
@@ -184,48 +279,33 @@ class PercentAnnualChanceNumpy:
             })
 
         # Mask the DEM where the valid raster == True
-        dem_array = da.where(self.valid_loc, dem_array, -9999)
+        empty = da.full_like(self.empty_valid, -9999, dtype=np.float32)
+        dem_array = da.where(self.valid_loc, dem_array, empty)
         dem_array = dem_array.round(2)
-        dem_to_plot = dem_array.compute()
-        max_val = int(np.max(dem_array))
-        plot_raster(dem_to_plot, title="DEM, Masked", vmin=0, vmax=max_val)
-        show_hist(dem_to_plot, lw=0.0)
 
-        # Align the DEM and valid raster
-        input_area_def = pyr.area_config.create_area_def(area_id="DEM_area", projection=src.crs, description="DEM Area",
-                                                         area_extent=src.bounds, resolution=(src.res[0], src.res[1]),
-                                                         nprocs=10, verbose=True)
-        print(f"Input Area Def: {input_area_def}")
-        nn_image = pyr.image.ImageContainerNearest(dem_to_plot, input_area_def, radius_of_influence=10)
-        dem_rs = nn_image.resample(self.valid_area_def)
-        dem_array = dem_rs.image_data
-        dem_array = da.from_array(dem_array, chunks=(2048, 2048))
-        # dem_pix_info = pyr.kd_tree.get_neighbour_info(input_area_def, self.valid_area_def, radius_of_influence=10,
-        #                                               neighbours=8, nprocs=10)
-        # dem_array = pyr.kd_tree.get_sample_from_neighbour_info(data=dem_array, neighbour_info=dem_pix_info,)
+        plot_raster(dem_array, title="DEM, Masked", value="Elevation")
+        # plot_histogram(dem_array, title="DEM Histogram", xlabel="Elevation", ylabel="Frequency")
+
+        print(f"\nTransform: \n{src.transform}")
+        print(f"\nProfile: \n{profile}")
+        src_transform = np.array(src.transform).reshape(3, 3)
+        dst_transform = np.array(self.valid_profile['transform']).reshape(3, 3)
+
+        # Check if the transformation matrices are identity matrices
+        if np.allclose(src_transform, np.eye(3)) or np.allclose(dst_transform, np.eye(3)):
+            raise ValueError(
+                "One of the transformation matrices is an identity matrix, which is not valid for georeferencing.")
+        if not np.array_equal(src_transform, dst_transform):
+            print(f"\nTransforms: \n\tSRC: {src_transform}\n\tDST: {dst_transform}\n\tnot quite equal...")
         print(f"\nDEM Array: {dem_array}")
-        # dem_array = reproject(
-        #     source=dem_array,
-        #     destination=np.empty_like(varray),
-        #     src_transform=transform,
-        #     src_crs=self.all_specs["DEM"].crs,
-        #     dst_transform=self.vspecs.transform,
-        #     dst_crs=self.vspecs.crs,
-        #     resampling=Resampling.bilinear
-        # )[0]
 
-        # Update the stats attributes
-        stats = {
-            "STATISTICS_STDDEV": np.round(np.std(dem_array), 2),
-            "STATISTICS_MEAN": np.round(np.mean(dem_array), 2),
-            "STATISTICS_MAXIMUM": np.round(np.max(dem_array), 2),
-            "STATISTICS_COUNT": np.round(np.count_nonzero(dem_array != -9999), 2),
-            "STATISTICS_MINIMUM": np.round(np.min(dem_array), 2),
-        }
+        # Calc stats and update profile
+        stats = calc_stats_dask(dem_array)
         profile.update(stats)
 
         # Export the masked DEM
-        export_raster(dem_array, os.path.join(self.output_subfolders[0], "DEM_masked.tif"), profile=profile)
+        export_raster(dem_array, os.path.join(self.output_subfolders[0], "DEM_masked.tif"),
+                      profile=profile, crs=self.vspecs.crs)
 
         # Convert to dataset
         self.analysis_ds = {"Ground": dem_array, "WSE_0_2pct": varray}
@@ -237,49 +317,46 @@ class PercentAnnualChanceNumpy:
         Open the WSE rasters using NumPy and rasterio
         """
 
+        fill_counter = 0.1
         for key, path in self.return_paths.items():
             with rasterio.open(path) as src:
                 profile = self.valid_profile.copy()
-                profile.update(transform=src.transform)
-
-                # Clip to relevant extent
+                # Crop WSE to valid raster
                 wse_array, transform = mask(src, self.valid_gdf.geometry, crop=True, pad=True, all_touched=True)
-                wse_array = np.where(self.valid_loc, wse_array, self.empty_valid)
+                profile.update(transform=transform)
 
-                # Store band 1
-                wse_array = wse_array[0]
+                profile = src.profile
+                wse_array = da.from_array(wse_array[0], chunks=(2048, 2048))
+                print(f"WSE Array: {wse_array}")
+
+                # Assign attributes
+                profile.update({
+                    "crs": src.crs,
+                    "BandName": "WSE",
+                    "long_name": "Water Surface Elevation",
+                    "DataType": "Elevation",
+                    "nodata": -9999
+                })
 
             # Rename the variable
             new_varname = f"WSE{RETURN_NAME_LOOKUP.get(key, 'WSE_UNK')}"
 
-            # Reindex to the DEM
-            wse_array = reproject(
-                source=wse_array,
-                destination=np.empty_like(self.analysis_ds["Ground"], dtype=np.float32),
-                src_transform=transform,
-                src_crs=src.crs,
-                dst_transform=self.vspecs.transform,
-                dst_crs=src.crs,
-                resampling=Resampling.nearest
-            )[0]
+            # Round, mask, fill the WSE
+            empty = da.full_like(self.empty_valid, -9999, dtype=np.float32)
+            filler_array = da.where(self.valid_loc, (self.analysis_ds["Ground"] - fill_counter), -9999)
+            fill_counter += 0.1
+            wse_array = da.where(self.valid_loc, wse_array, empty)
+            wse_array = da.where(wse_array == empty, filler_array, wse_array)
+            wse_array = wse_array.round(2)
 
-            # Round the WSE to 2 decimal places
-            wse_array = np.round(wse_array, 2)
-            wse_array = np.where(wse_array != 0, wse_array, self.empty_valid)
-
-            # Update the stats attributes
-            stats = {
-                "STATISTICS_STDDEV": np.round(np.std(wse_array), 2),
-                "STATISTICS_MEAN": np.round(np.mean(wse_array), 2),
-                "STATISTICS_MAXIMUM": np.round(np.max(wse_array), 2),
-                "STATISTICS_COUNT": np.round(np.count_nonzero(wse_array != -9999), 2),
-                "STATISTICS_MINIMUM": np.round(np.min(wse_array), 2),
-            }
-            profile.update(stats)
+            # Calc stats and update profile
+            # stats = calc_stats_dask(wse_array)
+            # profile.update(stats)
 
             # Export the WSE raster
-            outpath = os.path.join(self.output_subfolders[1], f"{new_varname}.tif")
-            export_raster(wse_array, outpath, profile=profile)
+            # outpath = os.path.join(self.output_subfolders[1], f"{new_varname}.tif")
+            # export_raster(wse_array, outpath,
+            #           profile=profile, crs=self.vspecs.crs)
 
             # Add to analysis dataset
             self.analysis_ds[new_varname] = wse_array
@@ -290,7 +367,8 @@ class PercentAnnualChanceNumpy:
         """
         Create percent chance start grid using NumPy and rasterio
         """
-        for varname, array in self.analysis_ds.items():
+        ds_iterator = {k: v for k, v in self.analysis_ds.items() if "WSE" in k}
+        for varname, array in ds_iterator.items():
             if "WSE" not in varname:
                 continue
 
@@ -301,7 +379,8 @@ class PercentAnnualChanceNumpy:
                 continue
 
             # Create percent chance array
-            pct_chance_array = np.where(array > 0, perc_chance, np.nan)
+            empty = da.full_like(self.empty_valid, -9999, dtype=np.float32)
+            pct_chance_array = da.where(array > 0, perc_chance, empty)
 
             # Add the pct chance array to the dataset
             self.analysis_ds[f"pct_{varname}"] = pct_chance_array
@@ -311,69 +390,194 @@ class PercentAnnualChanceNumpy:
         self.analysis_ds = {k: v for k, v in self.analysis_ds.items() if "pct_" not in k}
 
         # Get max percent chance
-        stacked_chance = np.stack(list(self.high_low_ds.values()), axis=-1)
-        max_pct = np.nanmax(stacked_chance, axis=-1)
+        stacked_chance = da.stack(list(self.high_low_ds.values()), axis=-1)
+        max_pct = da.max(stacked_chance, axis=-1)
         self.high_low_ds["pct_start"] = max_pct
 
+        # Convert to categorical
+        sorted_returns = sorted(RETURNS.values())
+        bins = sorted_returns + [1]
+        cat_start = da.digitize(max_pct, bins, right=False) - 1
+        self.high_low_ds["cat_start"] = cat_start
+        self.high_low_ds["bins"] = bins
+        print(f"Categorical Start: {self.high_low_ds['cat_start']}")
+        print(f"Bins: {bins}")
+
         # Export the pct start
-        profile = self._get_profile()
-        export_raster(self.high_low_ds["pct_start"], profile, os.path.join(self.output_subfolders[2], "pct_start.tif"))
+        profile = self.valid_profile
+        export_raster(self.high_low_ds["pct_start"], os.path.join(self.output_subfolders[2], "pct_start.tif"),
+                      profile=profile, crs=self.vspecs.crs, nodata=-9999)
 
         return self.high_low_ds
 
-    def compute_next_high_next_low(self):
-        """
-        Compute next highest and lowest percent chance using NumPy and rasterio
-        """
-        # Initialize next highest and lowest percent chance arrays
-        next_high = np.full_like(self.valid_loc, np.nan, dtype=np.float32)
-        next_low = np.full_like(self.valid_loc, np.nan, dtype=np.float32)
+    def compute_next_high_next_low_pct(self):
+        # Initialize NextLowestPct and NextHighestPct grids
+        min_return, max_return = min(RETURNS.keys()), max(RETURNS.keys())
+        self.high_low_ds['NextLowestPct'] = da.full_like(self.empty_valid, RETURNS[min_return], dtype=np.float32)
+        self.high_low_ds['NextHighestPct'] = da.full_like(self.empty_valid, RETURNS[max_return], dtype=np.float32)
 
-        for varname, array in self.high_low_ds.items():
-            if "pct_" not in varname:
+        # Mask the grids
+        self.high_low_ds["NextLowestPct"] = da.where(self.valid_loc, self.high_low_ds["NextLowestPct"], -9999)
+        self.high_low_ds["NextHighestPct"] = da.where(self.valid_loc, self.high_low_ds["NextHighestPct"], -9999)
+        plot_raster(self.high_low_ds["NextLowestPct"], title="NextLowestPct", value="Pct Chance", vmin=0, vmax=1,
+                    stops_list=list(RETURNS.values()))
+
+        # Compute next highest and lowest perc-chance return periods for each location
+        self.high_low_ds = get_higher_lower_pct_return(self.high_low_ds, 'cat_start')
+        print(f"Ann. % Chance Variables: \n\t{self.high_low_ds.keys()}")
+
+        # Convert to categorical
+        sorted_returns = sorted(RETURNS.values())
+        bins = sorted_returns + [np.inf]
+        for key in ["NextLowestPct", "NextHighestPct"]:
+            pct_array = self.high_low_ds[key]
+            cat_array = da.digitize(pct_array, bins, right=False) - 1
+            self.high_low_ds[f"cat_{key}"] = cat_array
+
+        # Export the next highest and lowest
+        self.high_low_ds = {k: auto_chunk_dask(v) for k, v in self.high_low_ds.items()}
+        for varname in ["NextLowestPct", "NextHighestPct"]:
+            array = auto_chunk_dask(self.high_low_ds[varname])
+            export_raster(array, os.path.join(self.output_subfolders[2], f"{varname}.tif"),
+                       profile=self.valid_profile, crs=self.vspecs.crs, nodata=-9999)
+            self.high_low_ds[varname] = da.where(array != -9999, array, np.nan)
+
+    def compute_next_high_next_low_elev(self):
+
+        lowest_elevations = f"WSE{RETURN_NAME_LOOKUP.get(min(RETURNS.keys()))}"
+        highest_elevations = f"WSE{RETURN_NAME_LOOKUP.get(max(RETURNS.keys()))}"
+
+        # Init next highest and lowest elevation arrays
+        self.high_low_ds["NextHighestElevation"] = da.full_like(self.empty_valid, fill_value=-9999, dtype=np.float32)
+        self.high_low_ds["NextLowestElevation"] = da.full_like(self.empty_valid, fill_value=-9999, dtype=np.float32)
+
+        # Mask the grids
+        self.high_low_ds["NextLowestElevation"] = da.where(self.valid_loc, self.high_low_ds["NextLowestPct"], -9999)
+        self.high_low_ds["NextHighestElevation"] = da.where(self.valid_loc, self.high_low_ds["NextHighestPct"], -9999)
+
+        # Fill each with elevations from highest and lowest WSE
+        self.high_low_ds["NextHighestElevation"] = da.where(self.analysis_ds[highest_elevations],
+                                                            self.analysis_ds[highest_elevations],
+                                                            self.high_low_ds["NextHighestElevation"])
+        self.high_low_ds["NextLowestElevation"] = da.where(self.analysis_ds[lowest_elevations],
+                                                           self.analysis_ds[lowest_elevations],
+                                                           self.high_low_ds["NextLowestElevation"])
+
+        print(f"{self.high_low_ds.keys()}")
+
+        for i, varname in enumerate(self.analysis_ds.keys()):
+            if "WSE" not in varname:
                 continue
+            print(f"\nProcessing {varname} to get next highest and lowest elevations")
 
-            perc_chance_name = varname.split("pct_")[1]
+            # Get % chance from varname
+            perc_chance_name = varname.split("WSE")[1]
             perc_chance = RETURNS.get(RETURN_NAMES.get(perc_chance_name, None), None)
             if not perc_chance:
                 continue
 
             # Find matching locations
-            tolerance = 1e-2
-            high_diff = np.abs(self.high_low_ds["pct_start"] - perc_chance)
-            low_diff = np.abs(self.high_low_ds["pct_start"] - perc_chance)
-            pct_high_match = np.where(high_diff < tolerance, 1, 0)
-            pct_low_match = np.where(low_diff < tolerance, 1, 0)
+            tolerance = 0.001  # Adjust the tolerance as needed
+            pct_high_match = da.abs(self.high_low_ds["NextHighestPct"] - perc_chance) < tolerance
+            pct_low_match = da.abs(self.high_low_ds["NextLowestPct"] - perc_chance) < tolerance
 
-            # Update next highest and lowest percent chance arrays
-            next_high = np.where(pct_high_match, perc_chance, next_high)
-            next_low = np.where(pct_low_match, perc_chance, next_low)
+            # num_high_cells = pct_high_match.sum().compute()
+            # num_low_cells = pct_low_match.sum().compute()
+            # print(f"\tAnn {perc_chance * 100}% Chance: {perc_chance} cells, H: {num_high_cells:}, L: {num_low_cells:}")
 
-        # Fill missing values
-        lowest_return_pct = RETURN_LOOKUP.get(min(RETURNS.keys()), None)
-        next_low = np.where(np.isnan(next_low) & self.valid_loc, lowest_return_pct, next_low)
+            # Get the elevations
+            self.high_low_ds["NextHighestElevation"] = da.where(pct_high_match,
+                                                                self.analysis_ds[varname],
+                                                                self.high_low_ds["NextHighestElevation"])
+            self.high_low_ds["NextLowestElevation"] = da.where(pct_low_match,
+                                                                   self.analysis_ds[varname],
+                                                                   self.high_low_ds["NextLowestElevation"])
 
-        highest_return_pct = RETURN_LOOKUP.get(max(RETURNS.keys()), None)
-        next_high = np.where(np.isnan(next_high) & self.valid_loc, highest_return_pct, next_high)
+            # outpath = os.path.join(self.output_subfolders[4], f"NextHighestElevations_{perc_chance}_{i}.tif")
+            # export_raster(self.high_low_ds["NextHighestElevation"], outpath, profile=self.valid_profile, crs=self.vspecs.crs)
+            # outpath = os.path.join(self.output_subfolders[4], f"NextLowestElevations_{perc_chance}_{i}.tif")
+            # export_raster(self.high_low_ds["NextLowestElevation"], outpath, profile=self.valid_profile, crs=self.vspecs.crs)
 
-        # Add to high_low_ds
-        self.high_low_ds["NextHighestPct"] = next_high
-        self.high_low_ds["NextLowestPct"] = next_low
 
-        # Export the next highest and lowest percent chance
-        profile = self._get_profile()
-        export_raster(self.high_low_ds["NextHighestPct"], profile,
-                      os.path.join(self.output_subfolders[2], "NextHighestPct.tif"))
-        export_raster(self.high_low_ds["NextLowestPct"], profile,
-                      os.path.join(self.output_subfolders[2], "NextLowestPct.tif"))
+        # Chunks them
+        self.high_low_ds["NextHighestElevation"] = auto_chunk_dask(self.high_low_ds["NextHighestElevation"])
+        self.high_low_ds["NextLowestElevation"] = auto_chunk_dask(self.high_low_ds["NextLowestElevation"])
 
-        return self.high_low_ds
+        # Do some filling and masking
+        self.high_low_ds["NextHighestElevation"] = da.where(self.high_low_ds["NextHighestElevation"] < self.analysis_ds["Ground"],
+                                                            self.analysis_ds[highest_elevations],
+                                                            self.high_low_ds["NextHighestElevation"])
+        self.high_low_ds["NextLowestElevation"] = da.where(self.high_low_ds["NextLowestElevation"] > self.analysis_ds["Ground"],
+                                                              self.analysis_ds[lowest_elevations],
+                                                              self.high_low_ds["NextLowestElevation"])
+
+        # Export the next highest and lowest elevations
+        oupath = os.path.join(self.output_subfolders[2], "NextHighestElevations.tif")
+        export_raster(self.high_low_ds["NextHighestElevation"], oupath, profile=self.valid_profile, crs=self.vspecs.crs)
+
+        oupath = os.path.join(self.output_subfolders[2], "NextLowestElevations.tif")
+        export_raster(self.high_low_ds["NextLowestElevation"], oupath, profile=self.valid_profile, crs=self.vspecs.crs)
+
+    def compute_perc_annual_chance(self):
+        """
+        Compute the percent chance
+        """
+
+        # Set calc tolerance
+        tolerance = 1e-4
+
+        # Drop the WSE rasters
+        to_drop = [v for v in self.analysis_ds.keys() if "WSE" in v]
+        print(f"Variables to drop: {to_drop}\nStarting Percent-Annual-Chance Calculation...")
+        for key in to_drop:
+            self.analysis_ds.pop(key)
+        ground_dem = self.analysis_ds["Ground"]
+        del self.analysis_ds
+
+        # Set up the variables
+        y1 = self.high_low_ds["NextLowestElevation"]
+        y2 = ground_dem
+        y3 = self.high_low_ds["NextHighestElevation"]
+        x1 = self.high_low_ds["NextLowestPct"]
+        x3 = self.high_low_ds["NextHighestPct"]
+
+        # Calculate demoninator difference
+        denom = y3 - y1
+        denom_0 = denom == 0
+        denom = da.where(denom_0, -9999, denom)
+        denom = da.where(self.valid_loc, denom, -9999)
+        # test_export_array(denom, self.output_subfolders[4], 532, -9999)
+
+        # Create and clip the numerator
+        numerator = (y2 - y1) * (da.log10(x3) - da.log10(x1))
+        max_num = da.max(numerator).compute()
+        print(f"Numerator: {max_num}, {da.min(numerator).compute()}")
+        # numerator = da.clip(numerator, None, max_num)
+
+        # Compute the percent annual chance
+        x2 = 10 ** ((y2 - y1) * (da.log10(x3) - da.log10(x1)) / denom + da.log10(x1))
+        x2 = x2.astype(np.float32)
+        x2 = auto_chunk_dask(x2)
+        # plot_raster(x2, title="PAC", value="PAC", vmin=0, vmax=1)
+
+        # Export the PAC
+        print(f"Exporting PAC")
+        pac_path = os.path.join(self.output_subfolders[3], "PAC.tif")
+
+        x2 = da.where(x2 > 0.1, 0.1, x2)
+        x2 = da.where(self.valid_loc, x2, -9999)
+        export_raster(x2, pac_path, profile=self.valid_profile, crs=self.vspecs.crs)
+
+        return x2
 
     def process_perc_chance(self):
         """
         Process the percent chance data
         """
         # Open the valid raster
+        for f in self.output_subfolders:
+            if not os.path.exists(f):
+                os.makedirs(f)
         valid_array = self.open_valid_raster()
         print(valid_array)
 
@@ -381,21 +585,26 @@ class PercentAnnualChanceNumpy:
         dem_array = self.open_dem_raster(valid_array)
 
         # Open the WSE rasters
-        # self.open_wse_rasters()
+        self.open_wse_rasters()
 
         # Create the percent chance start grid
-        # self.create_pct_start_grid()
+        self.create_pct_start_grid()
 
         # Compute the next highest and lowest percent chance
-        # self.compute_next_high_next_low()
+        self.compute_next_high_next_low_pct()
 
-        return self.analysis_ds, self.high_low_ds
+        # Compute the next highest and lowest elevations
+        self.compute_next_high_next_low_elev()
+
+        # Compute the percent annual chance
+        self.compute_perc_annual_chance()
+
 
 
 if __name__ == "__main__":
-    input_folder = r"E:\Iowa_1A\02_mapping\CoonYellow\Grids_CY\test_perc_chance"
-    output_folder = r"E:\Iowa_1A\02_mapping\CoonYellow\Grids_CY\test_perc_chance_OUT"
-    dem_path = r"E:\Iowa_1A\02_mapping\CoonYellow\Grids_CY\test_perc_chance\ground_dem_CY.tif"
+    input_folder = r"E:\Iowa_1A\02_mapping\CoonYellow\Grids_CY\Perc_Chance_IN"
+    output_folder = r"E:\Iowa_1A\02_mapping\CoonYellow\Grids_CY\Perc_Chance_OUT"
+    dem_path = r"E:\Iowa_1A\02_mapping\CoonYellow\Grids_CY\DEM\ground_dem_CY.tif"
 
     pcg = PercentAnnualChanceNumpy(input_folder, output_folder, dem_path)
     pcg.process_perc_chance()

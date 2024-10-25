@@ -107,7 +107,12 @@ def fc_extents_to_dict(fc, field_name) -> dict:
     epsg_list = [4269]
     if "EPSG_Code" in gdf.columns:
         for prj_code in gdf["EPSG_Code"].unique():
-            epsg_list.append(prj_code)
+            if isinstance(prj_code, str):
+                prj_codes = prj_code.split(",")
+                epsg_list.extend([int(code) for code in prj_codes])
+            else:
+                prj_code = int(prj_code)
+                epsg_list.append(prj_code)
     if field_name not in gdf.columns:
         print(f'Columns: {gdf.columns}')
         raise KeyError(f"Field name '{field_name}' not found in the GeoDataFrame columns.")
@@ -115,7 +120,7 @@ def fc_extents_to_dict(fc, field_name) -> dict:
     for epsg in epsg_list:
         print(f'EPSG: {epsg}, {type(epsg)}')
         if epsg != 4269:
-            gdf_prj = gdf.loc[gdf["EPSG_Code"] == epsg]
+            gdf_prj = gdf.loc[gdf["EPSG_Code"].astype(str).str.contains(str(epsg))]
             print(f'  GDF PRJ: {gdf_prj.head()}')
             print(f'  GDF PRJ Count: {len(gdf_prj)}')
             gdf_prj = gdf_prj.to_crs(epsg=epsg)
@@ -162,9 +167,9 @@ def extent_excel_from_fc(fc, fieldname, out_folder):
 
 
 if __name__ == "__main__":
-    feature_class = r"E:\nebraska_BLE\02_mapping\NE_Overall_Mapping.gdb\S_Submittal_HUC8_NE"
+    feature_class = r"E:\Iowa_00_Tracking\01_statewide\IA_Statewide_Meta\S_Submittal_Info_IA_BLE.shp"
     field_name = "HUC8"
-    out_loc = r"E:\CTP_Metadata\NE"
+    out_loc = r"E:\CTP_Metadata\IA_Statewide_BLE"
 
     outpaths = extent_excel_from_fc(feature_class, field_name, out_loc)
     print(f"Finished")

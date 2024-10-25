@@ -2,9 +2,10 @@
 import typing as T
 import os
 import threading
-
+import dask.array as da
 import numpy as np
 import xarray as xr
+from src.d01_processing.raster_ops import numpy_to_rioxarray, dask_to_rioxarray
 
 
 def test_export_array(array, folder: str, line: int, nodata_write=None, **kwargs):
@@ -15,6 +16,9 @@ def test_export_array(array, folder: str, line: int, nodata_write=None, **kwargs
             raise ValueError("Profile is required for NumPy arrays")
         array = numpy_to_rioxarray(array, kwargs.get("profile"))
 
+    if isinstance(array, da.Array):
+        array = xr.DataArray(array, dims=["y", "x"])
+
     if nodata_write is None:
         nodata_write = array.rio.nodata if isinstance(array, xr.DataArray) else None
 
@@ -23,10 +27,10 @@ def test_export_array(array, folder: str, line: int, nodata_write=None, **kwargs
     if not os.path.exists(test_folder):
         os.makedirs(test_folder)
 
-    if isinstance(array, xr.DataArray):
-        name = array.name
+    if isinstance(array, T.Union[xr.DataArray, da.Array]):
+        name = array.name if array.name else "TEST"
     else:
-        name = [v for v in array.rio.vars][0]
+        name = [v for v in array.data_vars.keys()][0]
     if name:
         outname = f"{name}_TEST_{line}"
     else:
@@ -60,13 +64,13 @@ def export_raster(array: [xr.DataArray, xr.Dataset],
                   nodata: T.Union[float, int] = None, **kwargs) -> T.Union[os.PathLike, str]:
     """Export an array to a tif file"""
 
-    """Export an array to a tif file for testing purposes"""
-
     # Test for NumPy array
     if isinstance(array, np.ndarray):
         if "profile" not in kwargs:
             raise ValueError("Profile is required for NumPy arrays")
-    array = numpy_to_rioxarray(array, kwargs.get("profile"))
+        array = numpy_to_rioxarray(array, kwargs.get("profile"))
+    elif isinstance(array, da.Array):
+        array = dask_to_rioxarray(array, transform=kwargs.get("transform"), crs=kwargs.get("crs"))
 
     if isinstance(array, xr.Dataset):
         ds = array
@@ -90,42 +94,20 @@ def export_raster(array: [xr.DataArray, xr.Dataset],
             nodata = -9999
         else:
             nodata = array.rio.nodata
-        array.rio.write_nodata(nodata, inplace=True, encoded=False)
+        array.rio.write_nodata(-9999, inplace=True, encoded=False)
 
         # Write it out
         try:
+            crs = kwargs.get("crs", None)
+            if crs:
+                array.rio.write_crs(crs, inplace=True)
             array.rio.to_raster(outpath, tiled=True, lock=threading.Lock(), compress='LZW',
                                 windowed=True, bigtiff="YES")
         except Exception as e:
             print(f"ERROR LN 76: {e}")
             os.remove(outpath)
 
-    print(f"EXPORT PATH: {outpath}")
+    print(f"\tEXPORT PATH: {outpath}, \n\t NODATA: {nodata}")
     # print(f'EXPORT: \n --- \n {array}\n')
     return outpath
 
-
-def numpy_to_rioxarray(array, profile):
-    """
-    Convert a NumPy array to a rioxarray DataArray with proper coordinates and dimensions.
-    """
-    # Extract the transform and CRS from the profile
-    transform = profile['transform']
-    crs = profile['crs']
-
-    # Create coordinate arrays for 'x' and 'y'
-    y_coords = np.arange(array.shape[0]) * transform[4] + transform[5]
-    x_coords = np.arange(array.shape[1]) * transform[0] + transform[2]
-
-    # Create the DataArray with the correct dimensions and coordinates
-    data_array = xr.DataArray(
-        array,
-        dims=['y', 'x'],
-        coords={'y': y_coords, 'x': x_coords}
-    )
-
-    # Assign the CRS and transform to the DataArray
-    data_array = data_array.rio.write_crs(crs)
-    data_array = data_array.rio.write_transform(transform)
-
-    return data_array.chunk({"x": 2048, "y": 2048})

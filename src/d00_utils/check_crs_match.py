@@ -1,4 +1,5 @@
 from rasterio import open as ro
+import rioxarray as rxr
 from rasterio.crs import CRS
 import geopandas as gpd
 from pyproj import CRS as pCRS
@@ -30,22 +31,20 @@ class CheckCRSmatch:
                 # print(f" Ext: {ext}")
                 if ext == ".shp":
                     gdf = gpd.read_file(path)
-                    crs = gdf.crs
+                    crs = pCRS.from_user_input(gdf.crs)
                     if crs.is_compound:
                         crs = crs.sub_crs_list[0]
                     self.crs_dict[path] = crs
                 elif ext in [".tif", ".img"]:
-                    # print(f"Path: {path}")
-                    with ro(path, "r") as raster:
-                        crs = raster.crs
-                        crs = pCRS.from_epsg(code=crs.to_epsg())
+                    with ro(path) as src:
+                        crs = pCRS.from_user_input(src.crs)
                         if crs.is_compound:
                             crs = crs.sub_crs_list[0]
                         print(f'    Found CRS: {crs}')
                         self.crs_dict[path] = crs
                 elif ext == ".gdb":
                     gdf = open_fc_any(path)
-                    crs = gdf.crs
+                    crs = pCRS.from_user_input(gdf.crs)
                     if crs.is_compound:
                         crs = crs.sub_crs_list[0]
                     self.crs_dict[path] = crs

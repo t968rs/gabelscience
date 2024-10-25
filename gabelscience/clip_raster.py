@@ -15,36 +15,43 @@ from src.d00_utils.bounds_convert import bbox_to_gdf
 from src.d00_utils.check_crs_match import check_crs_match_from_list
 from src.d00_utils.open_spatial import open_fc_any
 from src.d01_processing import export_raster
-from src.specs import raster_specs, literals
-from geocube.api.core import make_geocube
+from src.specs import raster_specs
 import rasterio.features
 
 
+
+
+RETURN_NAMES = {"_0_2pct": 0.002, "_01pct": 0.010, "_02pct": 0.020,
+                "_04pct": 0.040, "_10pct": 0.100}
+
+RETURN_NAMES_LOOKUP = {v: k for k, v in RETURN_NAMES.items()}
+
 def get_bounds_intersection(kwargs: T.Dict[str, T.Any]) -> T.Tuple[float, float, float, float]:
-    print(f'Finding bounds intersection...')
+    print(f' Finding bounds intersection...')
     out_loc = kwargs.get("out_loc", os.getcwd() + "/test_folder/")
     os.makedirs(out_loc, exist_ok=True)
-    out_path = out_loc + "bounds.shp"
 
     paths = [path for k, path in kwargs.items() if "path" in k]
-    print(f'Paths: {paths}')
+    print(f'\tPaths: {paths}')
     if not check_crs_match_from_list(paths):
         raise ValueError("CRS mismatch in input files")
+    else:
+        print(f'\tCRS match')
 
     bboxes = {}
     crs = None
     for i, path in enumerate(paths):
         extension = get_extension(path)
         s_type = get_spatial_type(extension)
-        # print(f'File: {path}, Type: {s_type}, Ext: {extension}')
+        print(f'\t\tFile: {path}, Type: {s_type}, Ext: {extension}')
         if s_type == "raster":
-            print(f"Raster file: {path}")
-            with rasterio.open(path) as src:
-                bboxes[f"path_{i}"] = src.bounds
+            print(f"\t\tRaster file: {path}")
+            with rioxr.open_rasterio(path, chunks={"x": 2048, "y": 2048}) as src:
+                bboxes[f"path_{i}"] = src.rio.bounds()
                 if not crs:
-                    crs = src.crs
+                    crs = src.rio.crs
         else:
-            print(f'Vector file: {path}')
+            print(f'\t\tVector file: {path}')
             gdf = open_fc_any(path)
             if not crs:
                 crs = gdf.crs
@@ -77,28 +84,15 @@ def get_return_from_string(input_string: str) -> T.Any:
         Any: The Python object created from the string.
     """
 
-    parts = input_string.split("_")
-    pct_part = None
-    for i, part in enumerate(parts):
-        if "pct" in part:
-            pct_part = part
-            break
-    if pct_part:
-        part_index = parts.index(pct_part)
-        pct_part = pct_part.replace("pct", "")
-
-        if pct_part.isnumeric():
-            if pct_part == "02":
-                prev_part = parts[part_index - 1]
-                if prev_part.isnumeric():
-                    pct_part = f"{prev_part}{pct_part}"
-            return float(f"0.{pct_part}")
-        else:
-            return None
+    for k, v in RETURN_NAMES.items():
+        if k in input_string:
+            return v
+    return None
 
 
 class ClipAraster:
     def __init__(self, input_pg_file: T.Union[os.PathLike, str],
+                 out_loc: T.Union[os.PathLike, str],
                  epsg_code: int,
                  raster_value: float,
                  rawraster: T.Union[os.PathLike, str],
@@ -119,6 +113,7 @@ class ClipAraster:
         """
 
         self.input_pg_file = input_pg_file
+        self.output_folder = out_loc
         self.epsg_code = epsg_code
         self.crs = f"EPSG:{epsg_code}"
         self.raster_value = raster_value
@@ -146,15 +141,19 @@ class ClipAraster:
         """
         Initializes output paths and filenames based on the raw raster path and the alternate output name.
         """
-        base, filename = os.path.split(self.raw_raster)
+        inbase, filename = os.path.split(self.raw_raster)
         name = filename.split(".")[0]
-        if not self.alternate_outname:
-            self.out_paths["clipped_raster"] = os.path.join(base, f"{name}_CLIPPED.tif")
-            self.out_paths["ones_mask"] = os.path.join(base, f"{name}_ONES_MASK.tif")
+        if not self.output_folder:
+            out_loc = inbase
         else:
-            self.out_paths["clipped_raster"] = os.path.join(base, self.alternate_outname + ".tif")
-            self.out_paths["ones_mask"] = os.path.join(base, f"{self.alternate_outname}_ONES_MASK.tif")
-        self.out_paths["output_folder"] = base
+            out_loc = self.output_folder
+        if not self.alternate_outname:
+            self.out_paths["clipped_raster"] = os.path.join(out_loc, f"{name}_CLIPPED.tif")
+            self.out_paths["ones_mask"] = os.path.join(out_loc, f"{name}_ONES_MASK.tif")
+        else:
+            self.out_paths["clipped_raster"] = os.path.join(out_loc, self.alternate_outname + ".tif")
+            self.out_paths["ones_mask"] = os.path.join(out_loc, f"{self.alternate_outname}_ONES_MASK.tif")
+        self.out_paths["output_folder"] = out_loc
 
     def _init_raster_specs(self):
         """
@@ -182,7 +181,8 @@ class ClipAraster:
 
         ds.rio.write_crs(crs)
 
-        rasterized = ds.rio.clip(gdf.geometry.values, crs=crs, all_touched=alltouched, from_disk=True, drop=False)
+        rasterized = ds.rio.clip(gdf.geometry.values, crs=crs, all_touched=alltouched,
+                                 from_disk=True, drop=False)
 
         return rasterized
 
@@ -196,6 +196,9 @@ class ClipAraster:
         variable0 = [v for v in ds.data_vars][0]
         nodata_value = ds[variable0].rio.nodata
         print(f' {variable0} nodata: {nodata_value}')
+        if os.path.exists(self.out_paths["clipped_raster"]):
+            return self.out_paths["clipped_raster"]
+
         ds.rio.write_crs(self.crs, inplace=True)
         ds[variable0] = ds[variable0].round(3)
 
@@ -218,18 +221,22 @@ class ClipAraster:
 
     def import_polygons(self):
         # Read Polygon Shapefile
-        gdf = open_fc_any(self.input_pg_file)
+        gdf = open_fc_any(self.input_pg_file, keeper_columns=["FLD_ZONE"])
+        input_features = gdf.shape[0]
 
         # QUery gdf
         if "FLD_ZONE" in gdf.columns and self.return_period:
-            if self.return_period == 0.01:
+            if self.return_period == 0.010:
+                print(f'\n\tFiltering for SFHA')
                 gdf = gdf.loc[gdf["FLD_ZONE"] != "X"]
+                filtered_features = gdf.shape[0]
+                print(f'\n\tFiltered {input_features - filtered_features} features')
 
         gdf = gdf.to_crs(self.crs).loc[:, ["geometry"]]
 
         polygon_area_pct = round(gdf.area.sum() / self.specs["input_raster"].valid_area, 2)
         if polygon_area_pct > 1.1:
-            print(f'\nPolygons are {polygon_area_pct} times larger than raster area')
+            print(f'\n\tPolygons are {polygon_area_pct} times larger than raster area')
             gdf.geometry = gdf.geometry.clip_by_rect(*self.target_bounds)
         print(f"\nRead polygon shapefile\n {gdf.columns}")
 
@@ -249,10 +256,18 @@ class ClipAraster:
 
         intersected = self.import_polygons()
 
+
+
         # Call the clip
-        with rioxr.open_rasterio(self.raw_raster) as src:
-            rasterized = make_geocube(vector_data=intersected, measurements=["values"],
-                                      like=src)
+        with rioxr.open_rasterio(self.raw_raster, chunks={"x": 2048, "y": 2048},
+                                 band_as_variable=True) as src:
+            # Create empty raster
+            ones = xr.ones_like(src, dtype="int8")
+            rasterized = xr.where(rasterio.features.geometry_mask(intersected.geometry,
+                                                                  transform=src.rio.transform(),
+                                                                    out_shape=src.rio.shape,
+                                                                    all_touched=self.alltouched),
+                                    ones, 0)
             for var in rasterized.rio.vars:
                 rasterized = rasterized.rename_vars({var: "ones_mask"})
                 rasterized["ones_mask"].rio.write_nodata(0, inplace=True).astype("int8")
@@ -274,38 +289,49 @@ class ClipAraster:
             raise ValueError("Invalid operation type")
 
         outpaths = {}
-        if self.output_ds:
+        if self.output_ds and isinstance(self.output_ds, xr.Dataset):
             for var in self.output_ds.rio.vars:
                 print(f'Exporting {var}')
                 outpath = self.out_paths[var]
-                export_raster.export_raster(self.output_ds[var], self.out_paths[var])
+                export_raster.export_raster(self.output_ds[var], self.out_paths[var],
+                                            nodata_write=0)
                 outpaths[var] = outpath
+        else:
+            outpaths = self.out_paths
         return outpaths
 
 
 if __name__ == "__main__":
-    input_shape = r"E:\pinal_2023\02_mapping\rasters\05_WSE_Processed\masks\SFHA_Pinal_Prelim_6405.shp"
-    epsg = 6405
+    input_shape = r"E:\Iowa_3B\02_WORKING\Rock_Little_Big_Sioux\Grids_LowerBigSioux_01\Masks\S_Submittal_Info_Lower_Big_Sioux_3417.shp"
+    output_folder = r"E:\Iowa_3B\04_delivery_0036S\FLOODPLAIN\Lower_Big_Sioux_10170203\Supplemental_Data\Rasters"
+    epsg = 3417
     value = 0.01
     operation_type = "clip only"
     exact_or_touched = True
 
-    alt_output_filename = "test"
-    folder = False  # r"E:\Iowa_1A\02_mapping\Grids_Lower_Wap\03_DRAFT_DFIRM"
-    raster_file = r"E:\pinal_2023\02_mapping\rasters\05_WSE_Processed\WSE_01pct_West_Zone_A1.tif"
+    alt_output_filename = None  # "test"
+    folder = r"E:\Iowa_3B\04_delivery_0036S\MM\Lower_Big_Sioux_10170203\03b_Addl_Returns"
+    raster_file = None  # r"E:\Iowa_3B\02_mapping\Floyd_Mapping\12_Filled\WSE_0_2pct_Filled.tif"
     if folder:
-        for gridtype in ["Depth", "WSE"]:
-            raster_file = rf"DRAFT_DFIRM_{gridtype}_01pct.tif"
+        for file in os.listdir(folder):
+            # print(f'File: {file}')
+            raster_file = os.path.join(folder, file)
             if os.path.isfile(raster_file):
-                raise ValueError(f"Raster path is file: {raster_file}")
-            raster_folder = raster_file
-            # ["make mask", "clip only", "make mask"]
-            alt_output_filename = None  # f"DRAFT_DFIRM_WSE_01pct"
-
-            init = ClipAraster(input_shape, epsg, value, raster_file, operation_type, alt_output_filename,
-                               exact_or_touched)
+                base, filename = os.path.split(raster_file)
+                name, ext = os.path.splitext(filename)
+                if ext == ".tif":
+                    alt_output_filename = None  # f"DRAFT_DFIRM_WSE_01pct"
+                    init = ClipAraster(input_shape, output_folder, epsg, value, raster_file, operation_type,
+                                       alt_output_filename,
+                                       exact_or_touched)
+                    outputs = init.rasterizer()
+                    print(f'Outputs')
+                    for k, v in outputs.items():
+                        print(f'{k}: {v}')
     else:
-        init = ClipAraster(input_shape, epsg, value, raster_file, operation_type, alt_output_filename, exact_or_touched)
+        init = ClipAraster(input_shape, output_folder, epsg, value,
+                           raster_file, operation_type,
+                           alt_output_filename, exact_or_touched)
         outputs = init.rasterizer()
         print(f'Outputs')
         for k, v in outputs.items():
