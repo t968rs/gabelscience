@@ -3,7 +3,7 @@ import geopandas as gpd
 import fiona
 from shapely.geometry import box
 from shapely.geometry import Polygon
-import osgeo
+from osgeo import gdal
 import rasterio
 import rasterio.merge
 import rasterio.windows
@@ -16,6 +16,7 @@ import xarray as xr
 import rioxarray
 from rioxarray.merge import merge_arrays
 import geocube.vector
+
 
 
 class MosaicRetiler:
@@ -295,28 +296,6 @@ class MosaicRetiler:
         array.close()
         print("    ...Saved output.\n\n")
 
-    def merge_multiple(self, paths, outfile, area):
-        if self.snap_raster is None:
-            cell_size, abs_size, crs, trans, hw, transform = \
-                (self.tgt_cellsize, -self.tgt_cellsize), self.tgt_cellsize, self.target_crs, None, None, None
-        else:
-            cell_size, abs_size, crs, trans, hw, transform = self.get_array_resolution(self.snap_raster)
-        map2array = []
-        for raster in paths:
-            anarray = rioxarray.open_rasterio(raster, chunks=self.chunks, lock=False)
-            mask_val = anarray.rio.nodata
-            if int(mask_val) != -9999:
-                print(f'Input mask: {mask_val}')
-                anarray.rio.write_nodata(-9999, encoded=True, inplace=True)
-            map2array.append(anarray)
-        print(f' Created individual arrays. Output cell size: {abs_size}')
-        da_merged = rioxarray.merge.merge_arrays(map2array, crs=f"EPSG:3419", nodata=-9999, res=abs_size,
-                                                 method='first', precision=20, target_aligned_pixels=True)  #
-
-        print(f' Merged arrays. Output array resolution: {da_merged.rio.resolution()}')
-        print(f' Saving mosaic grid to disc as {outfile}')
-        da_merged.rio.to_raster(outfile, tiled=True, lock=threading.Lock(), compress='LZW', windowed=True)
-
     def mosaic_rasters(self, pathlist, area):
         outpath = os.path.join(self.output_folder, f"DEM_mosaic_{area}.tif")
         self.output_dict[area] = outpath
@@ -468,7 +447,7 @@ class MosaicRetiler:
 if __name__ == "__main__":
     infolder = r"A:\KS\01_Data\raw_DEM"
     outfolder = r"A:\KS\02_mapping\Terrain_FishnetGrids\dem_testing25"
-    tiling_fc = r"A:\KS\02_mapping\Terrain_FishnetGrids\Grid_Mosaic_UpperRepublican.shp"
+    tiling_fc = None # r"A:\KS\02_mapping\Terrain_FishnetGrids\Grid_Mosaic_UpperRepublican.shp"
     # snapping_raster = r"A:\KS\02_mapping\Terrain_FishnetGrids\dem_testing\snap_raster.tif"
     extension = ".img"
     target_cell_size = 3.28083333

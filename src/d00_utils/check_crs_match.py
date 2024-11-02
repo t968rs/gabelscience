@@ -1,10 +1,15 @@
 from rasterio import open as ro
 import rioxarray as rxr
 from rasterio.crs import CRS
+from rasterio.windows import Window
+from osgeo import gdal
 import geopandas as gpd
 from pyproj import CRS as pCRS
 from src.d00_utils.get_ext_from import get_extension
 from src.d00_utils.open_spatial import open_fc_any
+from src.specs.raster_specs import create_raster_specs_from_path
+
+
 
 
 class CheckCRSmatch:
@@ -36,12 +41,13 @@ class CheckCRSmatch:
                         crs = crs.sub_crs_list[0]
                     self.crs_dict[path] = crs
                 elif ext in [".tif", ".img"]:
-                    with ro(path) as src:
-                        crs = pCRS.from_user_input(src.crs)
-                        if crs.is_compound:
-                            crs = crs.sub_crs_list[0]
-                        print(f'    Found CRS: {crs}')
-                        self.crs_dict[path] = crs
+                    with create_raster_specs_from_path(path) as specs:
+                        crs = pCRS.from_user_input(specs.crs)
+
+                    if crs.is_compound:
+                        crs = crs.sub_crs_list[0]
+                    print(f'\t\t\tFound CRS: {crs}')
+                    self.crs_dict[path] = crs
                 elif ext == ".gdb":
                     gdf = open_fc_any(path)
                     crs = pCRS.from_user_input(gdf.crs)

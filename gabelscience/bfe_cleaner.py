@@ -8,6 +8,7 @@ import os
 
 
 
+
 def keep_longest_line(gdf: gpd.GeoDataFrame, group_field, unique_field) -> gpd.GeoDataFrame:
     # Step 1: Calculate lengths of each line
     gdf_utm = gdf.to_crs(gdf.estimate_utm_crs("NAD83"))

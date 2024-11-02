@@ -6,7 +6,8 @@ from bs4 import BeautifulSoup
 CHECK_TYPES = ["Topology", "Attribute", "Schema", "Spatial"]
 
 
-def extract_MIP_Report_info(link):
+
+def extract_mip_report_info(link):
     # Load the HTML content
     with open(link) as file:
         content = file.read()
@@ -80,14 +81,14 @@ if __name__ == "__main__":
     # Create a DataFrame from the extracted data
     url = r"E:\Iowa_3B\02_WORKING\Rock_Little_Big_Sioux\Rock_Little_Big_Sioux_Mapping\FIRM DB QA Submission Report_rock.htm"
     area, date = "Rock", "2024_1022"
-    df = extract_MIP_Report_info(url)
+    report_df = extract_mip_report_info(url)
 
     # Save the DataFrame to an Excel file
     base, filename = os.path.split(url)
     name, ext = os.path.splitext(filename)
     outpath = os.path.join(base, f"MIP_Report_{area}_{date}.xlsx")
-    df.to_excel(outpath, index=False)
+    report_df.to_excel(outpath, index=False)
 
     # Display the DataFrame
-    print(df)
-    summarize_df(df)
+    print(report_df)
+    summarize_df(report_df)

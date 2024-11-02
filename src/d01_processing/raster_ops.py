@@ -3,6 +3,8 @@ import rioxarray as rioxr
 import numpy as np
 import threading
 import dask.array as da
+import subprocess
+
 
 
 def mask_with_ones(input_ds, key_string=None) -> xr.DataArray:
@@ -85,4 +87,12 @@ def dask_to_rioxarray(array, transform, crs):
     data_array = data_array.rio.write_transform(transform)
 
     return data_array.chunk({"x": 2048, "y": 2048})
+
+
+def calculate_statistics_and_overviews(raster_path):
+    # Build Overviews (Pyramids) using "nearest" resampling algorithm
+    subprocess.run(['gdaladdo', '--config', 'GDAL_TIFF_OVR_BLOCKSIZE', 'all', '-r', 'nearest', raster_path])
+
+    # Compute Statistics
+    subprocess.run(['gdalinfo', '-stats', raster_path])
 

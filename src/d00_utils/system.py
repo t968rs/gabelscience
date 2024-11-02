@@ -46,3 +46,21 @@ def file_size(file_path: str) -> [str, float]:
         return size_str, sizef, units
     else:
         raise FileNotFoundError(f"File not found: {file_path}")
+
+
+def increment_file_naming(file_path: str) -> str:
+    """
+    this function will increment the file name by one
+    """
+    if os.path.isfile(file_path):
+        file_info = os.path.splitext(file_path)
+        path, ext = file_info
+        path_parts = path.split("_")
+        if path_parts[-1].isdigit():
+            path_parts[-1] = str(int(path_parts[-1]) + 1)
+        else:
+            path_parts.append('1')
+        new_path = "_".join(path_parts) + ext
+        return new_path
+    else:
+        return file_path

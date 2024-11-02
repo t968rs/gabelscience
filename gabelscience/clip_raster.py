@@ -141,15 +141,15 @@ class ClipAraster:
         """
         Initializes output paths and filenames based on the raw raster path and the alternate output name.
         """
-        inbase, filename = os.path.split(self.raw_raster)
-        name = filename.split(".")[0]
+        inbase, fname = os.path.split(self.raw_raster)
+        justname = fname.split(".")[0]
         if not self.output_folder:
             out_loc = inbase
         else:
             out_loc = self.output_folder
         if not self.alternate_outname:
-            self.out_paths["clipped_raster"] = os.path.join(out_loc, f"{name}_CLIPPED.tif")
-            self.out_paths["ones_mask"] = os.path.join(out_loc, f"{name}_ONES_MASK.tif")
+            self.out_paths["clipped_raster"] = os.path.join(out_loc, f"{justname}_CLIPPED.tif")
+            self.out_paths["ones_mask"] = os.path.join(out_loc, f"{justname}_ONES_MASK.tif")
         else:
             self.out_paths["clipped_raster"] = os.path.join(out_loc, self.alternate_outname + ".tif")
             self.out_paths["ones_mask"] = os.path.join(out_loc, f"{self.alternate_outname}_ONES_MASK.tif")
@@ -311,7 +311,7 @@ if __name__ == "__main__":
 
     alt_output_filename = None  # "test"
     folder = r"E:\Iowa_3B\04_delivery_0036S\MM\Lower_Big_Sioux_10170203\03b_Addl_Returns"
-    raster_file = None  # r"E:\Iowa_3B\02_mapping\Floyd_Mapping\12_Filled\WSE_0_2pct_Filled.tif"
+    raster_file = None   # r"E:\Iowa_3B\02_mapping\Floyd_Mapping\12_Filled\WSE_0_2pct_Filled.tif"
     if folder:
         for file in os.listdir(folder):
             # print(f'File: {file}')
@@ -328,11 +328,12 @@ if __name__ == "__main__":
                     print(f'Outputs')
                     for k, v in outputs.items():
                         print(f'{k}: {v}')
-    else:
-        init = ClipAraster(input_shape, output_folder, epsg, value,
-                           raster_file, operation_type,
-                           alt_output_filename, exact_or_touched)
-        outputs = init.rasterizer()
-        print(f'Outputs')
-        for k, v in outputs.items():
-            print(f'{k}: {v}')
+    elif raster_file:
+        if isinstance(raster_file, str):
+            init = ClipAraster(input_shape, output_folder, epsg, value,
+                               raster_file, operation_type,
+                               alt_output_filename, exact_or_touched)
+            outputs = init.rasterizer()
+            print(f'Outputs')
+            for k, v in outputs.items():
+                print(f'{k}: {v}')

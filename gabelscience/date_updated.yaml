@@ -1,0 +1,32 @@
+'1427': 1427
+'202407023': 202407023
+---
+accessInformation: ''
+catalogPath: ''
+culture: en-US
+description: ''
+extent:
+- - -180
+  - -90
+- - 180
+  - 90
+guid: 14588D77-1792-4CEA-9C59-B0EEFC89DC7A
+licenseInfo: ''
+maxScale: 1.7976931348623157e+308
+minScale: 0
+name: public-NFHL
+snippet: '#Published~ 202407023 1427 (Manual) DH'
+spatialReference: GCS_North_American_1983
+summary: '#Published~ 202407023 1427 (Manual) DH'
+tags:
+- ''
+thumbnail: thumbnail/thumbnail.png
+title: NFHL
+type: Map Service
+typeKeywords:
+- ArcGIS
+- ArcGIS Server
+- Data
+- Map Service
+- Service
+url: ''

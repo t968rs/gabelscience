@@ -70,7 +70,8 @@ class RasterSpecs:
     path: T.Union[str, object]
     transform: T.Union[str, Affine]
     crs: T.Union[str, object, CRS]
-    valid_area: float = None
+    valid_area: float = None,
+    linear_units: str = None
 
     def __post_init__(self):
         if not isinstance(self.bounds, tuple) or len(self.bounds) != 4:
@@ -152,7 +153,7 @@ class RasterSpecs:
     def __dir__(self):
         return [
             'res', 'height', 'width', 'epsg', 'size_mb', 'size_gb', 'bounds',
-            'cellsizes', 'path', 'transform', 'crs'
+            'cellsizes', 'path', 'transform', 'crs', 'linear_units', 'valid_area'
         ]
 
 
@@ -185,6 +186,7 @@ def create_raster_specs_from_path(path, calc_valid_area=False):
             path=path,
             transform=src.transform,
             crs=src.crs,
+            linear_units=src.crs.linear_units,
             valid_area=valid_area
         )
 

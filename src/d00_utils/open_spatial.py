@@ -2,7 +2,7 @@ import geopandas as gpd
 import os
 
 
-def open_fc_any(fc_path, keeper_columns=None):
+def open_fc_any(fc_path, keeper_columns=None, count_only=False):
     """
     Opens a feature class from a given file path and returns it as a GeoDataFrame.
 
@@ -29,5 +29,18 @@ def open_fc_any(fc_path, keeper_columns=None):
         gdf = gpd.read_file(to_read, driver='FileGDB', layer=fc, columns=keeper_columns)
     else:
         # If not a File Geodatabase, read the file directly
-        gdf = gpd.read_file(fc_path, columns=keeper_columns)
-    return gdf
+        try:
+            gdf = gpd.read_file(fc_path, columns=keeper_columns)
+        except:
+            os.remove(fc_path)
+            if count_only:
+                return 0
+            else:
+                return None
+
+    if count_only:
+        feature_count = len(gdf)
+        gdf = None
+        return feature_count
+    else:
+        return gdf

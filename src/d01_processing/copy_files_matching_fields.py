@@ -52,9 +52,9 @@ class CopyFilesInSHPfield:
 
 
 if __name__ == "__main__":
-    in_path = r"E:\Iowa_3B\02_mapping\Little_Sioux\Terrain\Index_tiles_littlesioux_26915_2.shp"
+    in_path = r"E:\Iowa_2A\02_WORKING\South_Raccoon_07100007\Terrain\Tile_Index\Tile_Index_South_Raccoon.shp"
     field_name = "full_path"
-    outfolder = r"E:\Iowa_3B\02_mapping\Little_Sioux\Terrain\26915"
+    outfolder = r"E:\Iowa_2A\02_WORKING\South_Raccoon_07100007\Terrain\DEM_26915"
     actually_copy = True
 
     tile_mover = CopyFilesInSHPfield(in_path, field_name, outfolder, actually_copy)

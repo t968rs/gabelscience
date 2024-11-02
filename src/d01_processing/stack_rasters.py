@@ -3,7 +3,6 @@ import xml.etree.ElementTree as ET
 import rasterio
 from rasterio.shutil import copy as riocopy
 from rasterio.io import MemoryFile
-from src.d00_utils import RasterFinder
 
 
 class StackTIFFasVRT:

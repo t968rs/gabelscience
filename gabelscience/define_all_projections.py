@@ -1,10 +1,13 @@
 import os
 import rasterio
+from rasterio import crs
+import typing as T
 
 
 class DefinIowaProjections:
 
-    def __init__(self, input_folder, unk_crs):
+    def __init__(self, input_folder: T.Union[str, os.PathLike],
+                 unk_crs: int):
 
         self.input_folder = input_folder
         self.unk_crs = unk_crs
@@ -31,7 +34,7 @@ class DefinIowaProjections:
             # print(f'Root: {root}\n{folders}\n {files}')
             for file in files:
                 # print(f'File: {file}')
-                path = os.path.join(root, os.path.join(root, file))
+                path = os.path.join(root, file)
                 score_keeper[path] = [0, 0]
                 for ext in self.raster_exts:
                     if ext in path.lower() and "autolock" not in path.lower():
@@ -77,7 +80,8 @@ class DefinIowaProjections:
                 outcrs = self.unk_crs
 
             if outcrs is not None:
-                dataset.crs = rasterio.crs.CRS.from_epsg(outcrs)
+                outcrs = crs.CRS.from_epsg(outcrs)
+                dataset.crs = outcrs
                 print(f' Defined with: {outcrs}')
 
         print(f'Looked through {len(self.raster_paths)} for CRS EPSG\n\n')

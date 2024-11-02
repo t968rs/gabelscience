@@ -174,8 +174,8 @@ class CreateRasterIndex:
 
 
 if __name__ == "__main__":
-    root_raster_folder = r"E:\Iowa_1A\02_mapping\Grids_ApplePlum\04_FilledExtracts"
-    output_folder = r"E:\Iowa_1A\02_mapping\Grids_ApplePlum\04_FilledExtracts"
+    root_raster_folder = r"E:\Iowa_2A\01_data\2A_dem\Tiles_meters\processed"
+    output_folder = r"E:\Iowa_2A\01_data\2A_dem\Tiles_meters\Topo_Index"
     target_crs = None
     move_files = False
 
