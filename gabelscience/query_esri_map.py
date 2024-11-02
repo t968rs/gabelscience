@@ -1,6 +1,8 @@
 import os
 from concurrent.futures.process import ProcessPoolExecutor
 
+from fontTools.misc.cython import returns
+from fontTools.varLib.plot import stops
 from tqdm import tqdm
 import requests
 import urllib.parse
@@ -346,10 +348,15 @@ if __name__ == "__main__":
     # Query the effective NFHL data
     starting_offset, files = get_offset("../test_data/downloads/nfhl/28_00")
     print(f"Starting Offset: {starting_offset}")
-    outputs, count_features, failed_url_list = query_map_service(effective_nfhl_url,
-                                                                 local_folder=out_loc,
-                                                                 offset_start=starting_offset,
-                                                                 extant_files=files)
-    logger.info(f"Failed URLs: {failed_url_list}")
+    outyaml_loc = r"D:\o\OneDrive - kevin gabelman\nfhl\yaml"
+    start_yaml = os.path.join(outyaml_loc, "starting_specs.yaml")
+    with open(start_yaml, "w") as f:
+        yaml.dump({"offset": starting_offset, "files": files}, f)
 
-    _, outpaths = org_by_state(outputs, sub_lyr='28')
+    # outputs, count_features, failed_url_list = query_map_service(effective_nfhl_url,
+    #                                                              local_folder=out_loc,
+    #                                                              offset_start=starting_offset,
+    #                                                              extant_files=files)
+    # logger.info(f"Failed URLs: {failed_url_list}")
+    #
+    # _, outpaths = org_by_state(outputs, sub_lyr='28')
