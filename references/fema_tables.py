@@ -1,5 +1,22 @@
+FEMA_GDB_NULLS = {"Double": -9999, "Date": 8 / 8 / 8888, "String": None}
+FEMA_SHP_NULLS = {"Double": -9999, "Date": 8 / 8 / 8888, "String": ""}
+OTHER_REQUIRED_FIELDS = ["OBJECTID", "Geometry", "OID", "Shape", "Shape_Length", "Shape_Area",
+                         "SHAPE_Area", "SHAPE_Length"]
+SPECIAL_FIELDS = {"START_ID": "NP"}
+
+UNIQUE_IDS = {"s_profil_basln": "BASELN_ID", "s_fld_haz_ar": "FLD_AR_ID", "s_fld_haz_ln": "FLD_LN_ID",
+              "s_gen_struct": "STRUCT_ID", "s_nodes": "NODE_ID", "s_submittal_info": "SUBINFO_ID",
+              "s_subbasins": "SUBBAS_ID",
+              "s_alluvial_fan": "ALLUVL_ID", "s_bfe": "BFE_LN_ID", "s_wtr_ln": "WTR_LN_ID"}
+
+FC_TYPES = {"s_profil_basln": "Polyline", "s_fld_haz_ar": "Polygon", "s_fld_haz_ln": "Polyline",
+            "s_gen_struct": "Polyline", "s_nodes": "Point", "s_submittal_info": "Polygon",
+            "s_alluvial_fan": "Polygon", "s_bfe": "Polyline", "s_wtr_ln": "Polyline"}
+
+
 class FEMAtables:
-    def __init__(self, table_type):
+
+    def __init__(self, table_type=None):
         self.table_type = table_type
 
     @property
@@ -21,6 +38,7 @@ class FEMAtables:
         return {"field names": f_names, "required": f_req, "field types": f_types,
                 "lengths": length_prec, "domains": domain_relate}
 
+    @property
     def s_alluvial_fan(self):
 
         f_atts = ("Field", "R / A", "Type", "Length / Precision", "Joined", "Spatial / Lookup", "Domains")
@@ -100,6 +118,47 @@ class FEMAtables:
                 "lengths": length_prec, "domains": domain_relate}
 
     @property
+    def s_levee(self):
+
+        f_atts = ("Field", "R / A", "Type", "Length / Precision", "Joined", "Spatial / Lookup", "Domains")
+        f_names = (
+            'DFIRM_ID', 'VERSION_ID', 'LEVEE_ID', 'FC_SYS_ID',
+            'LEVEE_NM', 'LEVEE_TYP', 'WTR_NM', 'BANK_LOC',
+            'USACE_LEV', 'DISTRICT', 'PL84_99TF', 'CONST_DATE',
+            'DGN_FREQ', 'FREEBOARD', 'LEVEE_STAT', 'PAL_DATE',
+            'LEV_AN_TYP', 'FC_SEG_ID', 'OWNER', 'LEN_UNIT',
+            'SOURCE_CIT')
+        f_req = (
+            'R', 'R', 'R', 'R',
+            'R', 'R', 'R', 'R',
+            'R', 'A', 'R', 'A',
+            'A', 'A', 'R', 'A',
+            'R', 'A', 'R', 'R',
+            'R')
+        f_types = (
+            'Text', 'Text', 'Text', 'Text',
+            'Text', 'Text', 'Text', 'Text',
+            'Text', 'Text', 'Text', 'Date',
+            'Text', 'Double', 'Text', 'Date',
+            'Text', 'Text', 'Text', 'Text',
+            'Text')
+        length_prec = (6, 11, 25, 25,
+                       100, 24, 100, 100,
+                       1, 13, 1, "",
+                       50, '', 24, '',
+                       27, 25, 100, 16,
+                       11)
+        domain_relate = (
+            '', '', '', '',
+            '', 'D_Levee_Typ', '', '',
+            'D_TrueFalse', 'D_USACE_District', 'D_TrueFalse', 'Date',
+            '', 'Double', 'D_Levee_Status', 'Date',
+            'D_Levee_Analysis_Type', '', '', 'D_Length_Units',
+            'L_Source_Cit')
+        return {"field names": f_names, "required": f_req, "field types": f_types,
+                "lengths": length_prec, "domains": domain_relate}
+
+    @property
     def s_nodes(self):
 
         f_atts = ("Field", "R / A", "Type", "Length / Precision", "Joined", "Spatial / Lookup", "Domains")
@@ -153,6 +212,51 @@ class FEMAtables:
         return {"field names": f_names, "required": f_req, "field types": f_types,
                 "lengths": length_prec, "domains": domain_relate}
 
+    @property
+    def s_submittal_info(self):
+
+        f_atts = ("Field", "R / A", "Type", "Length / Precision", "Joined", "Spatial / Lookup", "Domains")
+        f_names = (
+            'DFIRM_ID', 'VERSION_ID', 'SUBINFO_ID', 'CASE_NO', 'CASE_DESC', 'SUBMIT_BY', 'HUC8', 'METHOD_TYP',
+            'COMP_DATE',
+            'TASK_TYP', 'HYDRO_MDL', 'HYDRA_MDL', 'CST_MDL_ID', 'TOPO_SRC', 'TOPO_V_ACC', 'TOPO_H_ACC', 'EFF_DATE',
+            'CONTRCT_NO', 'SOURCE_CIT')
+        f_req = ('R', 'R', 'R', 'R', 'R', 'R', 'A', 'R', 'R', 'R', 'A', 'A', 'A', 'A', 'A', 'A', 'R', 'R', 'R')
+        f_types = (
+            'Text', 'Text', 'Text', 'Text', 'Text', 'Text', 'Text', 'Text', 'Date', 'Text', 'Text', 'Text', 'Text',
+            'Text',
+            'Text', 'Text', 'Date', 'Text', 'Text')
+        length_prec = (6, 11, 25, 13, 254, 100, 8, 28, 'Default', 21, 40, 83, 25, 254, 254, 254, 'Default', 50, 11)
+        domain_relate = (
+            '', '', '', '', '', '', '', 'D_Study_Mth', '', 'D_Task_Typ', 'D_Hydro_Mdl', 'D_Hydra_Mdl', 'L_Cst_Model',
+            '',
+            '', '', '', '', 'L_Source_Cit')
+        return {"field names": f_names, "required": f_req, "field types": f_types,
+                "lengths": length_prec, "domains": domain_relate}
+
+    @property
+    def s_wtr_ln(self):
+
+        f_atts = ("Field", "R / A", "Type", "Length / Precision", "Joined", "Spatial / Lookup", "Domains")
+        f_names = (
+            'DFIRM_ID', 'VERSION_ID', 'WTR_LN_ID',
+            'WTR_NM', 'SHOWN_FIRM', 'SHOWN_INDX',
+            'SOURCE_CIT')
+        f_req = ('R', 'R', 'R',
+                 'R', 'A', 'A',
+                 'R')
+        f_types = (
+            'Text', 'Text', 'Text',
+            'Text', 'Text', 'Text',
+            'Text')
+        length_prec = (6, 11, 25, 100, 1, 1, 11)
+        domain_relate = (
+            '', '', '',
+            '', 'D_TrueFalse', 'D_TrueFalse',
+            'L_Source_Cit')
+        return {"field names": f_names, "required": f_req, "field types": f_types,
+                "lengths": length_prec, "domains": domain_relate}
+
     @staticmethod
     def d_zone(return_period):
 
@@ -167,43 +271,39 @@ class FEMAtables:
 
         return fld_zone, zone_subty
 
-    def get_fields(self):
-        # Populate the list of dictionaries by iterating field names and the above tuple indices
-        # {"field names": f_names, "required": f_req, "field types": f_types,
-        #                 "lengths": length_prec, "domains": domain_relate}
 
-        allfields = []
-        table_name = self.table_type
-        table_fields_info = getattr(self, table_name)
-        for i, f_name in enumerate(table_fields_info['field names']):
-            thisfield_dict = {'field_name': f_name,
-                              'field_type': table_fields_info['field types'][i],
-                              'Required': table_fields_info['required'][i]}
-            if table_fields_info['field types'][i] == 'Text':
-                thisfield_dict['field_length'] = table_fields_info['lengths'][i]
+def get_fields(table_type):
+    # Populate the list of dictionaries by iterating field names and the above tuple indices
+    # {"field names": f_names, "required": f_req, "field types": f_types,
+    #                 "lengths": length_prec, "domains": domain_relate}
+    result = FEMAtables(table_type)
+    allfields = []
+    print(f"Getting fields for {table_type}")
+    table_name = table_type.lower()
+    print(f"Getting fields for {table_name}")
+    table_fields_info = getattr(result, table_name)
+    for i, f_name in enumerate(table_fields_info['field names']):
+        thisfield_dict = {'field_name': f_name,
+                          'field_type': table_fields_info['field types'][i],
+                          'Required': table_fields_info['required'][i]}
+        if table_fields_info['field types'][i] == 'Text':
+            thisfield_dict['field_length'] = table_fields_info['lengths'][i]
+        else:
+            thisfield_dict['field_length'] = ''
+        if table_fields_info['lengths'][i] != '':
+            if "domains" in table_fields_info:
+                domains = table_fields_info.get('domains')
+                print(f"Domains: {domains}")
+                if len(domains) >= i + 1:
+                    if "D_" in domains[i]:
+                        thisfield_dict['Domains'] = table_fields_info['domains'][i]
+                    elif "L_" in domains[i]:
+                        thisfield_dict['Related Table'] = table_fields_info['domains'][i]
             else:
-                thisfield_dict['field_length'] = ''
-            if table_fields_info['lengths'][i] != '':
-                if "D_" in table_fields_info['domains'][i]:
-                    thisfield_dict['Domains'] = table_fields_info['domains'][i]
-                elif "L_" in table_fields_info['domains'][i]:
-                    thisfield_dict['Related Table'] = table_fields_info['domains'][i]
-                else:
-                    thisfield_dict['Domains'] = ''
-                    thisfield_dict['Related Table'] = ''
+                thisfield_dict['Domains'] = ''
+                thisfield_dict['Related Table'] = ''
 
-            print(f'{f_name}\n  {thisfield_dict}')
-            allfields.append(thisfield_dict)
+        # print(f'{f_name}\n  {thisfield_dict}')
+        allfields.append(thisfield_dict)
 
-        return tuple(allfields)
-
-if __name__ == "__main__":
-    table = "s_fld_haz_ar"
-    init = FEMAtables(table)
-    fnames = []
-    for field in init.get_fields():
-        fnames.append(field['field_name'])
-
-    print(fnames)
-
-
+    return tuple(allfields)
