@@ -1,0 +1,37 @@
+
+# NFHL Online
+
+EFFECTIVE_NFHL_URL = "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer"
+
+NFHL_IDS = {0: 'NFHL Availability',
+ 1: 'LOMRs',
+ 3: 'FIRM Panels',
+ 4: 'Base Index',
+ 5: 'PLSS',
+ 6: 'Topographic Low Confidence Areas',
+ 7: 'River Mile Markers',
+ 8: 'Datum Conversion Points',
+ 9: 'Coastal Gages',
+ 10: 'Gages',
+ 11: 'Nodes',
+ 12: 'High Water Marks',
+ 13: 'Station Start Points',
+ 14: 'Cross-Sections',
+ 15: 'Coastal Transects',
+ 16: 'Base Flood Elevations',
+ 17: 'Profile Baselines',
+ 18: 'Transect Baselines',
+ 19: 'Limit of Moderate Wave Action',
+ 20: 'Water Lines',
+ 22: 'Political Jurisdictions',
+ 23: 'Levees',
+ 24: 'General Structures',
+ 25: 'Primary Frontal Dunes',
+ 26: 'Hydrologic Reaches',
+ 27: 'Flood Hazard Boundaries',
+ 28: 'Flood Hazard Zones',
+ 29: 'Seclusion Boundaries',
+ 30: 'Alluvial Fans',
+ 31: 'Subbasins',
+ 32: 'Water Areas',
+ 34: 'LOMAs'}
