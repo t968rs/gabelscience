@@ -1,7 +1,7 @@
 import geopandas as gpd
 import os
-from src.specs.raster_specs import create_raster_specs_from_path
-from src.d00_utils.bounds_convert import bounds_to_polygon
+from src.d00_utils.specs import create_raster_specs_from_path
+from src.d00_utils.gbounds import to_polygon
 from src.d03_show.reporting import accept_process_info
 from time import time
 
@@ -101,7 +101,7 @@ class CreateRasterIndex:
             auth_name, epsg_code = specs.crs.to_authority(90)
             epsg_list.append(epsg_code)
             df['in_crs'].append(epsg_code)
-            pg, gdf_pg = bounds_to_polygon(*specs.bounds, specs.crs)
+            pg, gdf_pg = to_polygon(specs.crs,,
             if tgt_crs:
                 gdf_pg.to_crs(tgt_crs, inplace=True)
             else:

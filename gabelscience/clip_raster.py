@@ -10,12 +10,12 @@ import rasterio.crs
 import xarray as xr
 import rioxarray as rioxr
 from src.d00_utils.regular_grids import create_regular_grid
-from src.d00_utils.get_ext_from import get_extension, get_spatial_type
-from src.d00_utils.bounds_convert import bbox_to_gdf
+from src.d00_utils.file_typing import get_extension, get_spatial_type
+from src.d00_utils.gbounds import bbox_to_gdf
 from src.d00_utils.check_crs_match import check_crs_match_from_list
 from src.d00_utils.open_spatial import open_fc_any
 from src.d01_processing import export_raster
-from src.specs import raster_specs
+from src.d00_utils.specs import raster_specs
 import rasterio.features
 
 
@@ -302,9 +302,9 @@ class ClipAraster:
 
 
 if __name__ == "__main__":
-    input_shape = r"E:\Iowa_3B\02_WORKING\Rock_Little_Big_Sioux\Grids_LowerBigSioux_01\Masks\S_Submittal_Info_Lower_Big_Sioux_3417.shp"
+    input_shape = r"E:\Iowa_2A\02_WORKING\Lower_Des_Moines_07100009\Grids\Masking\S_FLD_HAZ_AR_3418.shp"
     output_folder = r"E:\Iowa_3B\04_delivery_0036S\FLOODPLAIN\Lower_Big_Sioux_10170203\Supplemental_Data\Rasters"
-    epsg = 3417
+    epsg = 3418
     value = 0.01
     operation_type = "clip only"
     exact_or_touched = True

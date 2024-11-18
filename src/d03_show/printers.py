@@ -1,7 +1,7 @@
 """Various print functions for different file types"""
 import typing as T
 from src.d00_utils import table_column_slicer
-from src.d00_utils.get_ext_from import get_extension
+from src.d00_utils.file_typing import get_extension
 from rasterio.transform import Affine
 
 

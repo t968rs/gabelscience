@@ -2,7 +2,9 @@ import geopandas as gpd
 import pandas as pd
 import os
 import numpy as np
-from src.d00_utils.bounds_convert import bbox_to_gdf
+from dask import dataframe as dd
+from typing import Union
+from src.d00_utils.gbounds import bbox_to_gdf
 from pyproj import Transformer, CRS
 from pyproj.aoi import AreaOfInterest, AreaOfUse
 from statistics import mean
@@ -10,9 +12,55 @@ from tqdm import tqdm
 from decimal import Decimal, getcontext, setcontext
 from pprint import pprint
 
+from src.d00_utils.open_spatial import open_fc_any
 
 
-##
+def drop_empty_geometries(gdf):
+    # Check if the GDF has empty and get type
+    if gdf.geometry.isna().any():
+        return gdf.dropna(subset=['geometry'])
+    else:
+        return gdf
+
+def ensure_polygons(gdf):
+    """
+    Ensures that all geometries in the GeoDataFrame are of type POLYGON.
+    Converts LINESTRING geometries to POLYGON if necessary.
+    """
+    def convert_to_polygon(geom):
+        if geom.geom_type == 'LineString':
+            return gpd.GeoSeries([geom]).buffer(0).unary_union
+        return geom
+
+    gdf.geometry = gdf.geometry.apply(convert_to_polygon)
+    return gdf
+
+def set_geometry_column(gdf, geom_col):
+    if geom_col not in gdf.columns:
+        gdf.rename(columns={'geometry': geom_col}, inplace=True)
+
+    # Set the geometry column
+    if geom_col != 'geometry' and 'geometry' in gdf.columns:
+        gdf = gdf.drop(columns='geometry')
+
+    gdf.set_geometry(geom_col, inplace=True)
+    return gdf
+
+def get_gdf_geometry_types(gdf, subset: Union[bool, int, float] = False):
+    # Return unique geometry types
+    if not subset:
+        return gdf.geometry.geom_type.unique().tolist()
+    if isinstance(subset, bool):
+        sampled = gdf.sample(frac=0.1)
+    elif isinstance(subset, float):
+        sampled = gdf.sample(frac=subset)
+    elif isinstance(subset, int):
+        sampled = gdf.sample(n=subset)
+    else:
+        raise ValueError(f"Invalid subset type: {subset} {type(subset)}")
+    return sampled.geometry.geom_type.unique().tolist()
+
+
 def convert_linear_units(gdf, column=None, target_crs=None, target_units=None):
     """
     Convert linear units in a GeoDataFrame column to a target unit
@@ -105,6 +153,35 @@ def export_every_nth_to_new_list(input_list, n):
         new_list.append(input_list[i])
     return new_list
 
+def features_to_disk(features, outpath, sum_field=None, epsg=4269) -> [str, int, list]:
+    """
+    Write features to disk as a GeoJSON file.
+    Mostly used when the features are a subset of a larger dataset, or were retrieved from a service.
+
+    Returns outpath, feature count, and a list of values if a sum field is provided.
+    """
+    crs = CRS.from_epsg(epsg)
+    gdf = gpd.GeoDataFrame.from_features(features, crs=crs)
+    count = len(gdf)
+    if "OBJECTID" in gdf.columns:
+        gdf["OBJECTID"] = gdf["OBJECTID"].astype(int)
+
+    if sum_field is not None:
+        valuelist = gdf[sum_field].tolist()
+    else:
+        valuelist = None
+
+    gdf.to_file(outpath, driver='GeoJSON')
+    gdf = None
+    return outpath, count, valuelist
+
+def get_features(geojson):
+
+    """
+    Get features from a GeoJSON file.
+    """
+
+    return [f for f in geojson['features']]
 
 def process_near_table(gdf, tolerance=10, unique_id_column=None, target_crs=None):
     """
@@ -166,3 +243,23 @@ if __name__ == "__main__":
     pprint(delete_list, width=80, compact=True)
     print(bfe_gdf["distance"][:5])
     print("Done")
+
+
+def audit_field(path, field, field_type) -> np.array:
+    # Open GDF and get unique values
+    gdf = open_fc_any(path)
+    values_np = gdf[field].unique()
+    gdf = None
+
+    return values_np.tolist()
+
+
+def filter_features(df, target_ids, id_field):
+    return df[~df[id_field].isin(target_ids)]
+
+
+def add_unique_id_col_ddf(dgdf, id_field):
+    # Add a new field to a Dask DF with an indexed/unique ID
+    partitions = dgdf.npartitions
+    dgdf[id_field] = dd.from_pandas(dd.Series(range(len(dgdf)), name=id_field), npartitions=partitions)
+    return dgdf

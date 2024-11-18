@@ -1,4 +1,4 @@
-from src.specs import literals
+from src.d00_utils.specs import literals
 from dataclasses import dataclass
 import typing as T
 

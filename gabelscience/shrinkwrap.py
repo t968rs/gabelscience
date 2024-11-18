@@ -1,8 +1,6 @@
 import os
 import typing as T
 import dask
-import dask.array as da
-import dask.dataframe as dd
 import dask_geopandas
 import geopandas as gpd
 import pandas as pd
@@ -14,7 +12,7 @@ from dask.diagnostics import ProgressBar
 from src.d00_utils.regular_grids import create_regular_grid
 from src.d00_utils.system import get_system_memory
 from src.d03_show import cplotting, printers
-from src.specs.raster_specs import create_raster_specs_from_path
+from src.d00_utils.specs import create_raster_specs_from_path
 
 
 class ShrinkwrapRaster:

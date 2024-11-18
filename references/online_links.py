@@ -1,3 +1,4 @@
+import geopandas as gpd
 
 # NFHL Online
 
@@ -38,7 +39,7 @@ NFHL_IDS = {0: 'NFHL Availability',
  32: 'Water Areas',
  34: 'LOMAs'}
 
-NFHL_LAYER_NAMES = {
+NFHL_FC_NAMES = {
     "0": "NFHL_Availability",
     "1": "S_LOMR",
     "3": "S_FIRM_PAN",
@@ -74,3 +75,18 @@ NFHL_LAYER_NAMES = {
 }
 
 STATE_FIPS = "https://www2.census.gov/geo/docs/reference/state.txt"
+
+fema_communities_layer = "https://www.fema.gov/api/open/v1/NfipCommunityLayerComprehensive"
+msc_search = "https://msc.fema.gov/portal/advanceSearch"
+
+
+def get_state_fips_df():
+    state_fips_url = STATE_FIPS
+    state_fips_df = gpd.pd.read_csv(state_fips_url, sep="|")
+    state_fips_df.columns = [c.strip() for c in state_fips_df.columns]
+    state_fips_df["STATE_FIPS"] = state_fips_df["STATE"].apply(lambda x: f"{x:02d}")
+    state_fips_df['STATENS'] = state_fips_df['STATENS'].apply(lambda x: f"{x:011d}")
+    state_fips_df['STATE_NAME'] = state_fips_df['STATE_NAME'].apply(lambda x: x.strip())
+    state_fips_df['STUSAB'] = state_fips_df['STUSAB'].apply(lambda x: x.strip())
+
+    return state_fips_df, state_fips_df["STATE"].unique().tolist()
