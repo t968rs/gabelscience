@@ -7,3 +7,6 @@ zbase_env/
 *.log
 *__pycache__/
 *.idea/
+/references/ref_data/
+*.ipynb
+/references/CID/
