@@ -34,7 +34,7 @@ def convert_bytes(num):
         num /= 1024.0
 
 
-def file_size(file_path: str) -> [str, float]:
+def file_size(file_path: str) -> [str, float, str]:
     """
     this function will return the file size
     """

@@ -21,9 +21,6 @@ class S_FLD_HAZ_AR(Base):
     fld_zone = Column(String)
 
 
-
-
-
 class FEMATable:
     def __init__(self, table_type):
         self.table_type = table_type

@@ -10,9 +10,9 @@ import rasterio.crs
 import xarray as xr
 import rioxarray as rioxr
 from src.d00_utils.regular_grids import create_regular_grid
-from src.d00_utils.file_typing import get_extension, get_spatial_type
+from src.d00_utils.file_typing import gFileType, FileTypeInfo
 from src.d00_utils.gbounds import bbox_to_gdf
-from src.d00_utils.check_crs_match import check_crs_match_from_list
+from src.d00_utils.gbounds import gBounds
 from src.d00_utils.open_spatial import open_fc_any
 from src.d01_processing import export_raster
 from src.d00_utils.specs import raster_specs
@@ -32,39 +32,32 @@ def get_bounds_intersection(kwargs: T.Dict[str, T.Any]) -> T.Tuple[float, float,
     os.makedirs(out_loc, exist_ok=True)
 
     paths = [path for k, path in kwargs.items() if "path" in k]
-    print(f'\tPaths: {paths}')
-    if not check_crs_match_from_list(paths):
-        raise ValueError("CRS mismatch in input files")
-    else:
-        print(f'\tCRS match')
+    # print(f'\tPaths: {paths}')
+    # if not check_crs_match_from_list(paths):
+    #     raise ValueError("CRS mismatch in input files")
+    # else:
+    #     print(f'\tCRS match')
 
-    bboxes = {}
-    crs = None
+    all_bounds = {}
     for i, path in enumerate(paths):
-        extension = get_extension(path)
-        s_type = get_spatial_type(extension)
-        print(f'\t\tFile: {path}, Type: {s_type}, Ext: {extension}')
-        if s_type == "raster":
-            print(f"\t\tRaster file: {path}")
-            with rioxr.open_rasterio(path, chunks={"x": 2048, "y": 2048}) as src:
-                bboxes[f"path_{i}"] = src.rio.bounds()
-                if not crs:
-                    crs = src.rio.crs
+        # print(f'\t\tFile: {path}')
+        file_category = gFileType.from_path(path).fcat
+        print(f'\t\tFile: {path}, Type: {file_category}')
+        if file_category == "raster":
+            # print(f"\t\tRaster file: {path}")
+            all_bounds[path] = gBounds.from_raster_list([path])
         else:
-            print(f'\t\tVector file: {path}')
+            # print(f'\t\tVector file: {path}')
             gdf = open_fc_any(path)
-            if not crs:
-                crs = gdf.crs
-            bboxes[f"path_{i}"] = gdf.total_bounds
+            all_bounds[path] = gBounds.from_gdf(gdf)
+            gdf = None
 
-    bbox_pg = {}
-    for k, bbox in bboxes.items():
-        gdf = bbox_to_gdf(bbox, crs=crs)
-        outpath_ = out_loc + f"bounds_{k}.shp"
-        gdf.to_file(outpath_)
-        bbox_pg[k] = gdf.geometry
 
-    all_pg = [v for v in list(bbox_pg.values())]
+    polygons = {}
+    for path, g_bounds in all_bounds.items():
+        polygons[path] = g_bounds.to_gdf()
+
+    all_pg = [v for v in list(polygons.values())]
     print(f'-- {len(all_pg)} bounds polygons')
     all_geo = pd.concat(all_pg)
     pg_intersection = all_geo.union_all().intersection(all_geo.union_all())
@@ -302,16 +295,16 @@ class ClipAraster:
 
 
 if __name__ == "__main__":
-    input_shape = r"E:\Iowa_2A\02_WORKING\Lower_Des_Moines_07100009\Grids\Masking\S_FLD_HAZ_AR_3418.shp"
-    output_folder = r"E:\Iowa_3B\04_delivery_0036S\FLOODPLAIN\Lower_Big_Sioux_10170203\Supplemental_Data\Rasters"
+    input_shape = r"Z:\Iowa_2A\02_WORKING\Lake_Red_Rock_07100008\Grids\Mask\S_FLD_HAZ_AR_3418.shp"
+    output_folder = r"Z:\Iowa_2A\02_WORKING\Lake_Red_Rock_07100008\Grids\03_DRAFT_DFIRM"
     epsg = 3418
     value = 0.01
     operation_type = "clip only"
     exact_or_touched = True
 
     alt_output_filename = None  # "test"
-    folder = r"E:\Iowa_3B\04_delivery_0036S\MM\Lower_Big_Sioux_10170203\03b_Addl_Returns"
-    raster_file = None   # r"E:\Iowa_3B\02_mapping\Floyd_Mapping\12_Filled\WSE_0_2pct_Filled.tif"
+    folder = r"Z:\Iowa_2A\02_WORKING\Lake_Red_Rock_07100008\Grids\02_Filled"
+    raster_file = None  # r"E:\Iowa_2A\02_WORKING\Lower_Des_Moines_07100009\Grids\01_Filled\WSE_0_2pct_filled.tif"
     if folder:
         for file in os.listdir(folder):
             # print(f'File: {file}')

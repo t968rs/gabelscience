@@ -2,7 +2,7 @@ import geopandas as gpd
 from pyproj import CRS as pCRS
 from src.d00_utils.file_typing import get_extension
 from src.d00_utils.open_spatial import open_fc_any
-from src.d00_utils.specs import create_raster_specs_from_path
+from src.d00_utils.specs.raster_specs import create_raster_specs_from_path
 
 
 

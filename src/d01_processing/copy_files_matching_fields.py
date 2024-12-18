@@ -4,6 +4,8 @@ import shutil
 from time import time
 from src.d03_show.reporting import accept_process_info
 
+os.environ['GDAL_DATA'] = r'D:\GDAL_STUFF\Library\share\gdal'
+
 
 class CopyFilesInSHPfield:
     def __init__(self, shp_path, fieldname, out_folder, perf_copy=False):
@@ -32,7 +34,15 @@ class CopyFilesInSHPfield:
     def get_file_list_from_field(self):
         if not os.path.exists(self.out_folder):
             os.makedirs(self.out_folder)
-        unique_paths = list(set(self.gdf[self.fieldname].unique()))
+
+        if not self.fieldname or "full" not in self.fieldname:
+            if {"folder", "tile", "ext"}.issubset(self.gdf.columns):
+                # Construct the full path using folder, filename, and ext columns
+                self.gdf["full_path"] = self.gdf.apply(
+                    lambda row: os.path.join(row["folder"], row["tile"] + row["ext"]), axis=1)
+            else:
+                raise ValueError("The required columns (folder, filename, ext) are not present in the DataFrame")
+        unique_paths = list(set(self.gdf["full_path"].unique()))
         print(f"Found: {len(unique_paths)} paths to copy from {self.fieldname} field")
 
         # Copy the files
@@ -52,9 +62,9 @@ class CopyFilesInSHPfield:
 
 
 if __name__ == "__main__":
-    in_path = r"E:\Iowa_2A\02_WORKING\South_Raccoon_07100007\Terrain\Tile_Index\Tile_Index_South_Raccoon.shp"
-    field_name = "full_path"
-    outfolder = r"E:\Iowa_2A\02_WORKING\South_Raccoon_07100007\Terrain\DEM_26915"
+    in_path = r"Z:\Shell_Rock\02_WORKING\Terrain\Shell_Rock_Index_26915.shp"
+    field_name = None
+    outfolder = r"Z:\Shell_Rock\02_WORKING\Terrain\26915"
     actually_copy = True
 
     tile_mover = CopyFilesInSHPfield(in_path, field_name, outfolder, actually_copy)

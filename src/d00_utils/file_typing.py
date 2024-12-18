@@ -56,7 +56,7 @@ TABLE_TYPES_LOOKUP = {
 CATEGORIES = {"vector", "raster", "table"}
 
 streamlog = getalogger("file_typing", level="WARNING")
-flogger = getalogger("file_typing", level="INFO")
+flogger = getalogger("file_typing", level=10)
 
 @dataclass
 class FileTypeInfo:
@@ -68,6 +68,7 @@ class FileTypeInfo:
 
 FILE_TYPES = [
     FileTypeInfo(code='fc', description='GDB Feature Class', extensions=['.gdb'], category='vector', has_db=True),
+    FileTypeInfo(code='shp', description='Shapefile', extensions=['.shp'], category='vector', has_db=False),
     FileTypeInfo(code='glyr', description='GeoPackage Layer', extensions=['.gpkg'], category='vector', has_db=True),
     FileTypeInfo(code='gtiff', description='GeoTIFF Raster', extensions=['.tif'], category='raster', has_db=False),
     FileTypeInfo(code='img', description='ERDAS Raster', extensions=['.img'], category='raster', has_db=False),
@@ -83,7 +84,7 @@ class gFileType:
     fcode: str = None
     size_mb: float = None
     has_db: bool = False
-    fcat: str = None
+    fcat: str = None  # Category of file type
     extension: str = None
     description: str = None
 
@@ -120,6 +121,7 @@ class gFileType:
     @staticmethod
     def get_filetype_info_by_extension(extension):
         for ft in FILE_TYPES:
+            flogger.debug(f"Checking extension: {extension} against {ft.extensions}")
             if extension.lower() in [ext.lower() for ext in ft.extensions]:
                 return ft
         return None
