@@ -1,5 +1,6 @@
 from sqlalchemy import String, Integer, Float, Date, DOUBLE_PRECISION, Column
-from fema_field_definitions import FIELD_DEFINITIONS, convert_fields_to_postgres_types
+from fema_field_definitions import FIELD_DEFINITIONS
+from references.field_types import convert_fields_to_postgres_types
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from src.d00_utils.postgis_helpers import get_postgis_engine

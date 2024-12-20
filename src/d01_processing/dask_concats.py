@@ -11,7 +11,7 @@ from dask import dataframe as dd
 from dask.distributed import Client, performance_report as dpr
 from dask.diagnostics import ProgressBar
 from references.fema_tables import FEMATable
-from references.fema_field_definitions import convert_fields_to_postgres_types
+from references.field_types import convert_fields_to_postgres_types
 from src.d00_utils.file_typing import gFileType
 from src.d00_utils.maths import get_random_sample
 from src.d00_utils.loggers import getalogger

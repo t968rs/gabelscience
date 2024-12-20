@@ -1,8 +1,6 @@
 import os
-import shutil
-from zipfile import ZipFile, ZIP_DEFLATED
 from datetime import date
-
+from zipfile import ZipFile, ZIP_DEFLATED
 
 STRINGS_TO_INCLUDE = ["P02_", ".gdb"]
 

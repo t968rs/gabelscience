@@ -157,30 +157,3 @@ FIELD_DEFINITIONS = {
 }
 
 
-def convert_fields_to_postgres_types(input_fema_table):
-    from sqlalchemy import String, Integer, Float, Date, DOUBLE_PRECISION
-
-    input_fema_table = input_fema_table.upper()
-    print(f"Input Table: {input_fema_table}")
-    table_info = FIELD_DEFINITIONS.get(input_fema_table)
-    # print(f"Table Info: {table_info}")
-
-    field_names = FIELD_DEFINITIONS.get(input_fema_table).get("field names")
-    ftypes = FIELD_DEFINITIONS.get(input_fema_table).get("field types")
-
-    field_types = {
-        "Text": String,
-        "Double": DOUBLE_PRECISION,
-        "Date": Date,
-        "Integer": Integer,
-    }
-
-    sql_types = {}
-    for field in field_names:
-        fname_idx = field_names.index(field)
-        field_type = ftypes[fname_idx]
-        sql_types[field] = field_types[field_type]
-
-    return sql_types
-
-
