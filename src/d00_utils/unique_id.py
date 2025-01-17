@@ -7,11 +7,13 @@ class CountID:
     def __init__(self, gdf: gpd.GeoDataFrame,
                  start_value: int = 0,
                  str_len: int = 10,
-                 field_name="unique_id"):
+                 field_name: str = None):
 
         self.start = start_value
         self.str_len = str_len
         self.field_name = field_name
+        if not self.field_name:
+            self.field_name = "unique_id"
 
         self.used_id = set()
         self.count = 0

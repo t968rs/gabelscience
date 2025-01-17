@@ -16,9 +16,8 @@ class DefinIowaProjections:
 
     @property
     def bad_exts(self):
-        bad_exts = {".img": [".rrd", ".aux", ".xml"],
+        return {".img": [".rrd", ".aux", ".xml"],
                     ".tif": [".xml", ".ovr"]}
-        return bad_exts
 
     @property
     def raster_exts(self):
@@ -80,6 +79,7 @@ class DefinIowaProjections:
                 outcrs = self.unk_crs
 
             if outcrs is not None:
+                # noinspection PyArgumentList
                 outcrs = crs.CRS.from_epsg(outcrs)
                 dataset.crs = outcrs
                 print(f' Defined with: {outcrs}')

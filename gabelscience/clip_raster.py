@@ -2,24 +2,22 @@
 A class to clip raster data using a polygon shapefile. Can optionally export a "mask raster" with the same extent as the
 input raster, but with the values set to 1 where the input raster intersects the polygons, and 0 elsewhere.
 """
-import typing as T
-import pandas as pd
 import os
+import typing as T
+
 import geopandas as gpd
+import pandas as pd
 import rasterio.crs
-import xarray as xr
+import rasterio.features
 import rioxarray as rioxr
-from src.d00_utils.regular_grids import create_regular_grid
-from src.d00_utils.file_typing import gFileType, FileTypeInfo
-from src.d00_utils.gbounds import bbox_to_gdf
+import xarray as xr
+
+from src.d00_utils.file_typing import gFileType
 from src.d00_utils.gbounds import gBounds
 from src.d00_utils.open_spatial import open_fc_any
-from src.d01_processing import export_raster
+from src.d00_utils.regular_grids import create_regular_grid
 from src.d00_utils.specs import raster_specs
-import rasterio.features
-
-
-
+from src.d01_processing import export_raster
 
 RETURN_NAMES = {"_0_2pct": 0.002, "_01pct": 0.010, "_02pct": 0.020,
                 "_04pct": 0.040, "_10pct": 0.100}

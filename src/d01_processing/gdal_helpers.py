@@ -1,8 +1,10 @@
 from osgeo import gdal
+from osgeo.osr import SpatialReference as SR
+from pyproj import CRS, Transformer
 import os
 import typing as T
-from spatialist.auxil import crsConvert
 from src.d00_utils.system import increment_file_naming
+
 
 def create_vrt(input_files: T.List, vrt_path: T.Union[str, os.PathLike]) -> T.Union[str, os.PathLike]:
     gdal.BuildVRT(vrt_path, input_files,
@@ -32,18 +34,29 @@ def gdal_warp(input_files, output_file, target_crs, snap_specs, resampling_metho
     resampling_method : str
         Resampling method
 
+
     Returns
     -------
     None
     """
     if isinstance(input_files, str):
         input_files = [input_files]
-    target_srs = crsConvert(target_crs, 'osr')
+
+
+    # Import CRS object
+    target_crs = CRS.from_user_input(target_crs)
+    target_epsg = target_crs.to_epsg()
+
+    # create SR object
+    target_srs = SR()
+
+    target_srs.ImportFromEPSG(target_epsg)
+
     creation_options = ['COMPRESS=LZW', 'TILED=YES', 'BIGTIFF=YES', 'NUM_THREADS=ALL_CPUS']
     if snap_specs:
         warp_options = gdal.WarpOptions(format="GTiff",
                                         outputBounds=snap_specs.bounds,
-                                        outputBoundsSRS=crsConvert(snap_specs.epsg, 'osr'),
+                                        outputBoundsSRS=target_srs,
                                         xRes=snap_specs.cellsizes[0],
                                         yRes=snap_specs.cellsizes[1],
                                         targetAlignedPixels=True,

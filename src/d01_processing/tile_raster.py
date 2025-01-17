@@ -58,7 +58,7 @@ class Tiler:
         ds = rasterio.open(self.input_raster)
         # ds = rioxarray.open_rasterio(raster, chunks=True, lock=False)
         crop, crop_transform = mask(ds, [geom], crop=True)
-        outpath = os.path.join(self.outfolder, self.path_names[1] + f"_{str(count)}")
+        outpath = os.path.join(str(self.outfolder), str(self.path_names[1]) + f"_{str(count)}")
         metadata = ds.meta
         incrs = ds.crs
 

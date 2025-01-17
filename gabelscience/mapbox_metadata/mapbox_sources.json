@@ -1,0 +1,39 @@
+{
+    "mapbox_sources": [
+        {
+            "id": "S_FLD_HAZ_AR-ShellRock",
+            "type": "vector",
+            "url": "mapbox://t968rs.S_FLD_HAZ_AR-ShellRock"
+        },
+        {
+            "id": "BLE_Zone_A-ShellRock",
+            "type": "vector",
+            "url": "mapbox://t968rs.d8exalp4"
+
+        },
+        {
+            "id": "BLE_Zone_X",
+            "type": "vector",
+            "url": "mapbox://t968rs.BLE_Zone_X"
+
+        },
+        {
+            "id": "StateBoundary",
+            "type": "vector",
+            "url": "mapbox://t968rs.6otvvusv"
+        },
+        {
+            "id": "S_Submittal_Info",
+            "type": "geojson",
+            "data": "/served/spatial/S_Submittal_Info_IA_BLE.geojson"
+        }
+    ],
+  "mapbox_vector_names":
+    {
+        "S_FLD_HAZ_AR-ShellRock": "S_FLD_HAZ_AR-ShellRock-01",
+        "BLE_ZONE_A-ShellRock":  "BLE_Zone_A-0tvnd1",
+        "BLE_Zone_X": "BLE_Zone_X-01",
+        "StateBoundary": "US_states-9vevdn",
+        "ProjectAreas": "ia-ble-tracking-04"
+    }
+}

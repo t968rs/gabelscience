@@ -1,0 +1,11 @@
+{
+      "version": 1,
+      "layers": {
+        "{tileset_name}{suffix}": {
+          "source": "mapbox://tileset-source/{USERNAME}/{tileset_name}",
+          "minzoom": 3,
+          "maxzoom": 16
+          }
+        }
+      }
+    }

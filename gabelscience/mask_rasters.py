@@ -240,8 +240,8 @@ class MaskIt:
         Returns:
         - xarray.Dataset: The selected sub-region of the dataset.
         """
-        x_coords = ds.coords['x'].values
-        y_coords = ds.coords['y'].values
+        x_coords = ds.pg_coords['x'].values
+        y_coords = ds.pg_coords['y'].values
 
         # Iterate over possible windows
         for i in range(0, len(x_coords) - window_size_x + 1, window_size_x):
@@ -328,7 +328,7 @@ class MaskIt:
                                                            window_gdf=self.tile_gdf,
                                                            chunk_win=self.chunk_return).apply_reproject_match() for var
                                         in ds.data_vars}
-                    reprojected_ds = xr.Dataset(reprojected_vars, coords=mask_ds.coords)
+                    reprojected_ds = xr.Dataset(reprojected_vars, coords=mask_ds.pg_coords)
                     reprojected.append(reprojected_ds)
                     dataset_pbar.update(1)
                 client.close()

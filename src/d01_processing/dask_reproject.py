@@ -175,7 +175,7 @@ class DaskReproject:
                 print(f"Array: \n{arr.where(arr != -9999)}")
 
             empty_dask_array = da.empty_like(self.target_da.data)
-            concat_array = xr.DataArray(empty_dask_array, dims=self.target_da.dims, coords=self.target_da.coords)
+            concat_array = xr.DataArray(empty_dask_array, dims=self.target_da.dims, coords=self.target_da.pg_coords)
             try:
                 concat_array = da.block([arr for arr in padded_arrays])
             except ValueError as ve:
@@ -184,7 +184,7 @@ class DaskReproject:
                 pass
 
             # Wrap the concatenated Dask array in an xarray DataArray
-            return xr.DataArray(concat_array, dims=self.target_dims, coords=self.target_da.coords
+            return xr.DataArray(concat_array, dims=self.target_dims, coords=self.target_da.pg_coords
                                 ).chunk(self.chunk_win).fillna(-9999)
 
     def compute_delays_asloop(self, delayed_results):
@@ -192,7 +192,7 @@ class DaskReproject:
         with tqdm(total=2 * len(delayed_results)) as pbar, ResourceProfiler(dt=1) as profiler:
             empty_dask_array = da.empty_like(self.target_da.data)
             # Wrap the dask array in a DataArray, copying over dimensions and coordinates
-            concat_array = xr.DataArray(empty_dask_array, dims=self.target_da.dims, coords=self.target_da.coords)
+            concat_array = xr.DataArray(empty_dask_array, dims=self.target_da.dims, coords=self.target_da.pg_coords)
             # Compute the delayed results
             for i, arr in enumerate(delayed_results):
                 try:
@@ -209,7 +209,7 @@ class DaskReproject:
                         concat_array = concat_array.rechunk(self.chunk_win)
 
                         # Wrap the concatenated Dask array in an xarray DataArray
-                        reprojected_da = xr.DataArray(concat_array, dims=self.target_dims, coords=self.target_da.coords)
+                        reprojected_da = xr.DataArray(concat_array, dims=self.target_dims, coords=self.target_da.pg_coords)
                         update_tqdm_pbar(pbar, desc_update=f'Array {i}: {reprojected_da.name} finished', number=1,
                                          append=True)
 

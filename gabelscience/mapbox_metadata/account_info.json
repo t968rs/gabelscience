@@ -1,0 +1,275 @@
+[
+    {
+        "type": "vector",
+        "id": "t968rs.S_FLD_HAZ_AR-ShellRock",
+        "name": "S_FLD_HAZ_AR-ShellRock",
+        "center": [
+            -92.31124958487501,
+            42.450153274564784,
+            10
+        ],
+        "created": "2025-01-13T18:38:36.604Z",
+        "modified": "2025-01-13T18:40:08.500Z",
+        "visibility": "private",
+        "description": "Custom tileset created from GeoJSON, t968rs/S_FLD_HAZ_AR-ShellRock",
+        "filesize": 400161106,
+        "status": "available",
+        "tileset_precisions": {
+            "30cm": 2202
+        },
+        "created_by_client": "mts",
+        "cu": 2.2404
+    },
+    {
+        "type": "vector",
+        "id": "t968rs.BLE_Zone_X",
+        "name": "BLE_Zone_X",
+        "center": [
+            -92.93433163315058,
+            43.13441101259361,
+            11
+        ],
+        "created": "2025-01-13T17:48:22.791Z",
+        "modified": "2025-01-13T17:49:54.494Z",
+        "visibility": "private",
+        "description": "Custom tileset created from GeoJSON, t968rs/BLE_Zone_X",
+        "filesize": 636352112,
+        "status": "available",
+        "tileset_precisions": {
+            "30cm": 1322
+        },
+        "created_by_client": "mts",
+        "cu": 2.2138
+    },
+    {
+        "type": "vector",
+        "id": "t968rs.d8exalp4",
+        "name": "BLE_Zone_A-0tvnd1",
+        "center": [
+            -92.5471420288086,
+            42.754947662353516,
+            12
+        ],
+        "created": "2025-01-13T17:17:38.479Z",
+        "modified": "2025-01-13T17:17:38.260Z",
+        "visibility": "private",
+        "description": "",
+        "filesize": 130950467,
+        "status": "available",
+        "tileset_precisions": {
+            "30cm": 685.2588539113721
+        },
+        "created_by_client": "studio",
+        "cu": 0.3994
+    },
+    {
+        "type": "raster",
+        "id": "t968rs.8173rj1i",
+        "name": "indochina_1900_02-auggsk",
+        "center": [
+            103.2009973913953,
+            14.013780204686109,
+            0
+        ],
+        "created": "2024-12-18T00:05:06.275Z",
+        "modified": "2024-12-18T00:05:06.059Z",
+        "visibility": "private",
+        "description": "",
+        "filesize": 22453013,
+        "status": "available",
+        "tileset_precisions": {
+            "10m": 7251060.265940569
+        },
+        "created_by_client": "studio",
+        "cu": 0.3601
+    },
+    {
+        "type": "raster",
+        "id": "t968rs.5ntmjlzj",
+        "name": "burma-thailand-i-1958-bs4119",
+        "center": [
+            100.16583514026263,
+            15.457375431656843,
+            0
+        ],
+        "created": "2024-12-17T03:17:22.075Z",
+        "modified": "2024-12-17T03:17:21.859Z",
+        "visibility": "private",
+        "description": "",
+        "filesize": 168550125,
+        "status": "available",
+        "tileset_precisions": {
+            "10m": 8536808.947847657
+        },
+        "created_by_client": "studio",
+        "cu": 0.4089
+    },
+    {
+        "type": "vector",
+        "id": "t968rs.ia-ble-tracking",
+        "name": "ia-ble-tracking",
+        "center": [
+            -93.1207739788553,
+            42.36595581439225,
+            6
+        ],
+        "created": "2024-12-12T18:25:48.108Z",
+        "modified": "2024-12-12T18:27:50.793Z",
+        "visibility": "private",
+        "description": "Custom tileset created from GeoJSON, t968rs/ia-ble-tracking",
+        "filesize": 10048038,
+        "status": "available",
+        "tileset_precisions": {
+            "30cm": 81162
+        },
+        "created_by_client": "mts",
+        "cu": 3.2758
+    },
+    {
+        "type": "vector",
+        "id": "t968rs.6otvvusv",
+        "name": "US_states-9vevdn",
+        "center": [
+            0.31476593017578125,
+            28.408233165740967,
+            2
+        ],
+        "created": "2024-12-06T23:06:09.743Z",
+        "modified": "2024-12-06T23:06:09.522Z",
+        "visibility": "private",
+        "description": "",
+        "filesize": 13776497,
+        "status": "available",
+        "tileset_precisions": {
+            "10m": 21724514.295382828
+        },
+        "created_by_client": "studio",
+        "cu": 0.3797
+    },
+    {
+        "type": "vector",
+        "id": "t968rs.0itdpada",
+        "name": "Work_Areas-0b972m",
+        "center": [
+            -93.3898929743405,
+            41.93824653402827,
+            0
+        ],
+        "created": "2024-12-06T22:09:36.023Z",
+        "modified": "2024-12-06T22:09:35.805Z",
+        "visibility": "public",
+        "description": "",
+        "filesize": 501890,
+        "status": "available",
+        "tileset_precisions": {
+            "1m": 104993.24980441954
+        },
+        "created_by_client": "studio",
+        "cu": 0.3681
+    },
+    {
+        "type": "vector",
+        "id": "t968rs.ciybz275m001j2qmxzq5z1mh1-5e48d",
+        "name": "roads_shasta",
+        "center": [
+            -121.9008325,
+            41.361974000000004,
+            0
+        ],
+        "created": "2017-01-24T20:36:53.818Z",
+        "modified": "2017-01-24T20:36:53.466Z",
+        "visibility": "public",
+        "description": "",
+        "filesize": 88090,
+        "status": "available",
+        "tileset_precisions": {
+            "free": 0
+        },
+        "created_by_client": null,
+        "cu": null
+    },
+    {
+        "type": "vector",
+        "id": "t968rs.1zdonuq2",
+        "name": "cities-7g3p3y",
+        "center": [
+            -122.90931500005712,
+            40.23706499986969,
+            0
+        ],
+        "created": "2017-01-23T20:49:12.681Z",
+        "modified": "2017-01-23T20:49:12.277Z",
+        "visibility": "public",
+        "description": "",
+        "filesize": 576,
+        "status": "available",
+        "tileset_precisions": {
+            "free": 0
+        },
+        "created_by_client": null,
+        "cu": null
+    },
+    {
+        "type": "vector",
+        "id": "t968rs.abdrkvs4",
+        "name": "HUC8-60bnyt",
+        "center": [
+            -122.20503564575371,
+            40.538028279684006,
+            2
+        ],
+        "created": "2017-01-23T20:48:24.246Z",
+        "modified": "2017-01-23T20:48:23.940Z",
+        "visibility": "public",
+        "description": "",
+        "filesize": 858676,
+        "status": "available",
+        "tileset_precisions": {
+            "free": 0
+        },
+        "created_by_client": null,
+        "cu": null
+    },
+    {
+        "type": "vector",
+        "id": "t968rs.2n1da2q0",
+        "name": "counties-d3ulq7",
+        "center": [
+            -122.03145399999994,
+            41.059978000000086,
+            4
+        ],
+        "created": "2017-01-23T20:47:43.227Z",
+        "modified": "2017-01-23T20:47:42.872Z",
+        "visibility": "public",
+        "description": "",
+        "filesize": 1656284,
+        "status": "available",
+        "tileset_precisions": {
+            "free": 0
+        },
+        "created_by_client": null,
+        "cu": null
+    },
+    {
+        "type": "vector",
+        "id": "t968rs.6k0q3zvk",
+        "name": "Boundary_Project-948tf8",
+        "center": [
+            -122.40619609204373,
+            40.64911223939653,
+            0
+        ],
+        "created": "2017-01-23T20:41:25.692Z",
+        "modified": "2017-01-23T20:41:25.389Z",
+        "visibility": "public",
+        "description": "",
+        "filesize": 272108,
+        "status": "available",
+        "tileset_precisions": {
+            "free": 0
+        },
+        "created_by_client": null,
+        "cu": null
+    }
+]

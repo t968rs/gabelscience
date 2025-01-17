@@ -13,12 +13,12 @@ class gBounds:
         self.crs = CRS.from_user_input(crs)  # Coordinate Reference System as pyproj.CRS object
 
 
-    def to_polygon(self):
+    def to_polygon(self) -> tuple[Polygon, gpd.GeoDataFrame]:
         # Create GDF polygon from bounding box
         bbox = box(*self.bounds)
         return bbox, gpd.GeoDataFrame(index=[0], geometry=[bbox], crs=self.crs)
 
-    def to_gdf(self):
+    def to_gdf(self) -> gpd.GeoDataFrame:
         return gpd.GeoDataFrame(index=[0], geometry=[box(*self.bounds)], crs=self.crs)
 
     def to_esri_json(self):
@@ -79,6 +79,7 @@ class gBounds:
             toplist.append(bounds.top)
         max_bounds = (min(leftlist), min(bottomlist), max(rightlist), max(toplist))
         return gBounds(max_bounds, crs)
+
 
 
 def to_polygon(xmin, ymin, xmax, ymax, crs):
